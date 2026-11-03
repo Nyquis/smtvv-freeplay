@@ -29,6 +29,10 @@ around it.
 - Do not download tools or binaries at runtime. Ask first, and vendor or pin
   anything that is approved — the bundled `python/` and `repak/` exist for
   exactly this reason.
+- If a firewall, proxy, sandbox or permission rule blocks a network or tool
+  operation, **STOP and tell the user** so they can unblock it. Never work
+  around the block: no alternate mirrors, no disabling security controls, no
+  guessing at the missing data.
 - Shipped code must contain no telemetry, analytics, auto-updaters or
   background network calls.
 
@@ -41,6 +45,12 @@ around it.
   part of development, testing or verification.
 - Use a disposable copy or synthetic fixture instead. If a real install must be
   touched, stop and ask the user explicitly.
+- **Never create new files or directories inside the game or any program
+  install tree** while developing or analysing. Leave those installs clean:
+  write scratch data to this repository or the system temp directory. Reading
+  is fine; writing is not. (The shipped installer writes its paks and exe
+  backups there when a *user* runs it — that is product behaviour, not
+  development.)
 - Any action that writes outside this repository needs explicit approval.
 
 ## 3. Keep `.gitignore` and `.kopiaignore` in sync
@@ -67,9 +77,8 @@ same change**.
   the user's approval first.
 - A change must cover both the new behaviour and the regression it fixes. If a
   change cannot reasonably be tested, say so and explain why.
-- Put tests in `tests/`. **`pytest` is deliberately not installed yet** and
-  there is no `test` task — ask before adding both, then run them with
-  `pixi run test`.
+- Put tests in `tests/` and run them with `pixi run test` (`pytest` is part of
+  the pixi environment; `pytest.ini` sets the import path).
 - Test pure logic that does not need the real game: patch selection,
   offset/byte patching, argument parsing, install-path discovery, pak handling.
 - Tests must be hermetic: no network, no real game install, no writes outside
@@ -89,6 +98,8 @@ examples, commit messages or branch names:
 - Steam IDs or account names, email addresses, real names, machine names, IPs
 - save files, dumped game assets, or logs containing any of the above
 - absolute paths that identify the user — write `C:\Users\<user>\...` instead
+- generated caches that embed absolute paths (`__pycache__/*.pyc`,
+  `.pytest_cache/`); both are ignored and must never be committed
 
 Before every commit:
 
@@ -106,6 +117,11 @@ Before every commit:
 - This checkout authenticates `origin` as `Nyquis` through repo-local config.
   Do not change `credential.*` or `user.*`, and do not run `gh auth switch`.
 - Keep commits focused and explain the *why* in the message.
+- **Before every push, audit what is being published** for machine-identifying
+  text: `C:\Users\<name>`, `C:/Users/<name>`, `/home/<name>`, `AppData`, the
+  machine hostname and account names. Docs and examples use placeholders such
+  as `C:\Users\<user>\...`. Check the staged diff **and** `git log -p --all`;
+  both must come back clean.
 
 ## 7. Project conventions
 

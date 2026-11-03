@@ -122,7 +122,7 @@ uninstall_all() {
 
 # --- Questions (skipped when patch flags are given) ---
 if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
-    BOOL_KEYS=(essences heal mimans miracles compendium jump shop magatsuhi intro masakado newborn)
+    BOOL_KEYS=(essences heal mimans miracles compendium jump shop magatsuhi intro masakado newborn estoma)
     declare -A DESC=(
         [essences]="Reusable Essences (essences not consumed)"
         [heal]="Leyline Auto-Heal (full HP/MP on leyline use)"
@@ -132,6 +132,7 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
         [jump]="Superjump (hold jump to rise, faster air control)"
         [shop]="Free Growth Items (Gospels, Grimoires, Sutras, Balms, Incenses free in shop)"
         [magatsuhi]="Full Magatsuhi (gauge full at the start of every battle)"
+        [estoma]="Free Estoma (barrier costs no Magatsuhi)"
         [intro]="Skip Intro (no logos or opening movie; boot to title menu)"
         [masakado]="Masakado Unlock (powered-up Masakado fight without the Kiou Sword)"
         [newborn]="Newborn Clears Compendium (NG+ Newborn starts with an empty compendium)"
@@ -266,7 +267,7 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
     for k in essences heal mimans miracles compendium; do ask "$k"; done
     ask_items
     ask_warned jump
-    for k in shop magatsuhi; do ask "$k"; done
+    for k in shop magatsuhi estoma; do ask "$k"; done
     ask_warned intro
     for k in masakado newborn; do ask "$k"; done
     ask_autosave

@@ -2,7 +2,7 @@
 
 Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
 
-**Current version: 5.7.43**
+**Current version: 5.8.0**
 
 ## Features
 
@@ -69,6 +69,10 @@ Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
     each effect with the panel, `DualSenseHaptics\SMTVHaptics.exe` in the
     game's `Project\Binaries\Win64` folder.
 
+15. **Free Estoma** - the Estoma Barrier costs no Magatsuhi: summoning it and
+    keeping it through moon phases leave the gauge untouched. Estoma Field I
+    still has to be learned, and Estoma Field II becomes redundant.
+
 ## Requirements
 
 - Shin Megami Tensei V: Vengeance — the **Steam** version, on Windows or
@@ -94,9 +98,9 @@ See **[INSTALL.md](INSTALL.md)** for the full step-by-step. Quick version below.
 
 3. Answer one question per mod (Reusable Essences, Leyline Auto-Heal, Miman
    Reveal, NG+ Miracles, Free Compendium, Item Hacks (Battle Refill or
-   Stockpile), Superjump, Free Growth Items, Full Magatsuhi, Skip Intro,
-   Masakado Unlock, Newborn Clears Compendium, Autosave After Battle,
-   DualSense Haptics). Press Enter to skip a mod.
+   Stockpile), Superjump, Free Growth Items, Full Magatsuhi, Free Estoma,
+   Skip Intro, Masakado Unlock, Newborn Clears Compendium, Autosave After
+   Battle, DualSense Haptics). Press Enter to skip a mod.
 
    Run `install.bat` again later to add or remove mods: it shows which ones
    are installed, offers to uninstall all of them first, and otherwise asks
@@ -160,6 +164,7 @@ Optional patch flags:
 --no-jump
 --no-shop
 --no-magatsuhi
+--no-estoma
 --no-intro
 --no-masakado
 --no-newborn
@@ -251,6 +256,16 @@ Uses the same `SetNextStep` hook as Battle Refill (below). A battle keeps
 its own Magatsuhi gauge for each side, copied from the party's gauge as it
 starts and written back as it ends. On the battle's opening steps the
 player's gauge is set to its maximum of 100.
+
+### Free Estoma
+
+In Vengeance, Estoma is a Miracle: the Estoma Barrier drains the Magatsuhi
+gauge when it is summoned and again each time the Moon Phase advances. The
+costs live in the `BP_EstomaData` Blueprint asset as four integers - the
+summon and moon-phase costs, plus the reduced pair used after Estoma Field II.
+A small override pak built from your own `pakchunk0` sets all four to zero,
+so the barrier never touches the gauge. Estoma Field I still has to be
+learned. The uninstallers remove the pak.
 
 ### Autosave After Battle
 

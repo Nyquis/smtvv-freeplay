@@ -89,6 +89,12 @@ if [ -f "$STOCK_PAK" ]; then
     rm -f "$STOCK_PAK"
 fi
 
+ESTOMA_PAK="$GAMEDIR/Project/Content/Paks/pakchunk92_FreeEstoma_P.pak"
+if [ -f "$ESTOMA_PAK" ]; then
+    echo "Removing Free Estoma data pak..."
+    rm -f "$ESTOMA_PAK"
+fi
+
 if [ -f "$BIN/xinput1_3.dll" ]; then
     if command -v sha256sum >/dev/null 2>&1; then
         existing_hash="$(sha256sum "$BIN/xinput1_3.dll" | awk '{print tolower($1)}')"

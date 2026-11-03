@@ -23,6 +23,7 @@ This reads the committed `pixi.lock` and creates `.pixi/` inside the repo
 | Task | Command | What it does |
 | --- | --- | --- |
 | `patch` | `pixi run patch` | Runs `patch_smtvv_freeplay.py` with the pixi Python |
+| `test` | `pixi run test` | Runs the test suite (`pytest tests`) |
 | `lint` | `pixi run lint` | `ruff check` |
 | `fmt` | `pixi run fmt` | `ruff format` — **rewrites files** |
 | `fmt-check` | `pixi run fmt-check` | `ruff format --check` |
@@ -58,12 +59,12 @@ between the two.
 
 ## Tests
 
-There is no test suite yet. When tests are needed:
+`pixi run test` runs `pytest tests`. `pytest` is part of the pixi environment
+and `pytest.ini` adds the repository root to the import path.
 
-1. Ask before adding `pytest` to the pixi environment.
-2. Add a `test` task (`pytest tests`) and a `tests/` directory.
-3. Write tests only for code you add or change; ask before expanding coverage
-   beyond that.
+- Tests are change-scoped: cover the code you add or change.
+- Ask before expanding coverage beyond that.
+- Tests must be hermetic: synthetic fixtures only, no game files, no network.
 
 ## Lint and format
 

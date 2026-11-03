@@ -35,7 +35,7 @@ if not defined BINDIR (
 for %%I in ("!BINDIR!\..\..\..") do set "GAMEDIR=%%~fI"
 
 :: --- What is installed now ---
-set "BOOL_KEYS=essences heal mimans miracles compendium jump shop magatsuhi intro masakado newborn"
+set "BOOL_KEYS=essences heal mimans miracles compendium jump shop magatsuhi intro masakado newborn estoma"
 set "STATE=!BINDIR!\Freeplay.features"
 for %%K in (%BOOL_KEYS%) do set "INST_%%K="
 set "INST_itemhacks="
@@ -117,6 +117,7 @@ call :ask_items
 call :ask_warned jump "Superjump (hold jump to rise, faster air control)"
 call :ask shop "Free Growth Items (Gospels, Grimoires, Sutras, Balms, Incenses free in shop)"
 call :ask magatsuhi "Full Magatsuhi (gauge full at the start of every battle)"
+call :ask estoma "Free Estoma (barrier costs no Magatsuhi)"
 call :ask_warned intro "Skip Intro (no logos or opening movie; boot to title menu)"
 call :ask masakado "Masakado Unlock (powered-up Masakado fight without the Kiou Sword)"
 call :ask newborn "Newborn Clears Compendium (NG+ Newborn starts with an empty compendium)"

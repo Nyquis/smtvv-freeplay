@@ -51,6 +51,9 @@ Applies quality-of-life patches to the game executable and optional data paks:
  13. Autosave after battle  -- (optional, --autosave-slot N) the game is
      saved to slot N (1-20) after every battle, once back on the field.
 
+ 14. Free Estoma  -- the Estoma Barrier costs no Magatsuhi to summon or to
+     keep through moon phases (data pak built from the player's game files).
+
 Executable patches share the same large CC cave in .rdata.
 
 Usage
@@ -79,12 +82,13 @@ import quest_pak  # noqa: E402
 import newborn  # noqa: E402
 import stockpile  # noqa: E402
 import autosave  # noqa: E402
+import estoma  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.7.43"
+MOD_VERSION = "5.8.0"
 FEATURES_FILE = "Freeplay.features"   # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -361,6 +365,8 @@ def main() -> None:
                         help=argparse.SUPPRESS)   # removed feature; accepted for old scripts
     parser.add_argument("--no-newborn", action="store_true",
                         help="Skip the Newborn Clears Compendium patch")
+    parser.add_argument("--no-estoma", action="store_true",
+                        help="Skip the Free Estoma patch")
     parser.add_argument("--autosave-slot", type=int, metavar="N",
                         choices=range(autosave.SLOT_MIN, autosave.SLOT_MAX + 1),
                         help="Save to slot N (1-20) after every battle")
@@ -379,6 +385,7 @@ def main() -> None:
     do_masakado = not args.no_masakado
     do_shop = not args.no_shop
     do_newborn = not args.no_newborn
+    do_estoma = not args.no_estoma
     autosave_slot = args.autosave_slot
 
     game_dir = locate_game_dir(args.game_dir)
@@ -405,7 +412,8 @@ def main() -> None:
     # below only if the miracles patch is enabled and succeeds.
     # ------------------------------------------------------------------
     for pak in (MIRACLE_PAK, shop_pak.SHOP_PAK, boot_pak.BOOT_PAK, quest_pak.QUEST_PAK,
-                LEGACY_MAP_PAK, newborn.NEWBORN_PAK, stockpile.STOCK_PAK):
+                LEGACY_MAP_PAK, newborn.NEWBORN_PAK, stockpile.STOCK_PAK,
+                estoma.ESTOMA_PAK):
         stale_pak = os.path.join(game_dir, PAKS_SUBPATH, pak)
         if os.path.isfile(stale_pak):
             print(f"  Removing previous {pak} (rebuilt if selected)")
@@ -448,6 +456,7 @@ def main() -> None:
                                 ("Intro", do_intro),
                                 ("Masakado", do_masakado),
                                 ("Newborn", do_newborn),
+                                ("Estoma", do_estoma),
                                 ("Autosave", autosave_slot is not None)] if on]
     total = len(enabled)
 
@@ -839,6 +848,24 @@ def main() -> None:
             except RuntimeError as exc:
                 print(f"    WARNING: carry-over text pak not built - {exc}")
 
+    # ==================================================================
+    # PATCH: Free Estoma (data pak only)
+    # ==================================================================
+    if do_estoma:
+        repak_tool = find_repak()
+        try:
+            if repak_tool is None:
+                raise RuntimeError("bundled repak tool not found")
+            old_costs = estoma.build_estoma_pak(
+                game_dir, PAKS_SUBPATH, SOURCE_PAK, repak_tool, run_repak)
+            patch_num += 1
+            print(f"\n  [{patch_num}/{total}] Free Estoma")
+            print(f"    Data pak      : {estoma.ESTOMA_PAK}")
+            print("    Costs zeroed  : " + ", ".join(
+                f"{name}={value}" for name, value in old_costs.items()))
+        except RuntimeError as exc:
+            print(f"\n  WARNING: Free Estoma skipped - {exc}")
+
     # ------------------------------------------------------------------
     # Backup & save
     # ------------------------------------------------------------------
@@ -855,7 +882,8 @@ def main() -> None:
     features = {"essences": do_essences, "heal": do_heal, "mimans": do_mimans,
                 "miracles": do_miracles, "compendium": do_compendium, "jump": do_jump,
                 "shop": do_shop, "magatsuhi": do_magatsuhi, "intro": do_intro,
-                "masakado": do_masakado, "newborn": do_newborn}
+                "masakado": do_masakado, "newborn": do_newborn,
+                "estoma": do_estoma}
     lines = [f"{k}={int(v)}" for k, v in features.items()]
     lines.append("itemhacks=" + ("stockpile" if do_stockpile else "refill" if do_refill else "none"))
     lines.append(f"autosave={autosave_slot or 0}")
