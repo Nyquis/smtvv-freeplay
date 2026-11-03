@@ -2,7 +2,7 @@
 
 Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
 
-**Current version: 5.9.0**
+**Current version: 5.9.1**
 
 ## Features
 
@@ -163,6 +163,7 @@ Optional patch flags:
 --no-miracles
 --no-compendium
 --no-refill
+--stockpile
 --no-jump
 --no-shop
 --shop-consumables {default,free,immediate}
@@ -174,6 +175,8 @@ Optional patch flags:
 --no-intro
 --no-masakado
 --no-newborn
+--autosave-slot N
+--game-dir PATH
 ```
 
 `patch_essences.py` is kept as a compatibility wrapper for older instructions.

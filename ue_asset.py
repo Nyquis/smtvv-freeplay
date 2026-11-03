@@ -21,7 +21,11 @@ def _crc_tables() -> tuple[list[int], list[int]]:
         reflected.append(c)
         c = i << 24
         for _ in range(8):
-            c = ((c << 1) ^ 0x04C11DB7) & 0xFFFFFFFF if c & 0x80000000 else (c << 1) & 0xFFFFFFFF
+            c = (
+                ((c << 1) ^ 0x04C11DB7) & 0xFFFFFFFF
+                if c & 0x80000000
+                else (c << 1) & 0xFFFFFFFF
+            )
         legacy.append(c)
     return reflected, legacy
 
@@ -69,10 +73,10 @@ class _Reader:
         if n == 0:
             return ""
         if n < 0:
-            s = self.d[self.p:self.p - 2 * n].decode("utf-16-le")[:-1]
+            s = self.d[self.p : self.p - 2 * n].decode("utf-16-le")[:-1]
             self.p += -2 * n
             return s
-        s = self.d[self.p:self.p + n - 1].decode("latin-1")
+        s = self.d[self.p : self.p + n - 1].decode("latin-1")
         self.p += n
         return s
 
@@ -89,7 +93,7 @@ class Package:
         if r.i32() != -7:
             raise RuntimeError("unsupported package version")
         r.skip(12)
-        r.skip(20 * r.i32())                     # custom versions
+        r.skip(20 * r.i32())  # custom versions
         self.at = {"header": r.p}
         r.skip(4)
         r.fstr()
@@ -118,7 +122,7 @@ class Package:
         gens = r.i32()
         self.at["gen_names"] = r.p + 8 * (gens - 1) + 4 if gens else None
         r.skip(8 * gens)
-        for _ in range(2):                       # saved-by / compatible engine versions
+        for _ in range(2):  # saved-by / compatible engine versions
             r.skip(10)
             r.fstr()
         r.skip(4)
@@ -191,7 +195,12 @@ class Package:
                 pos += 24
             elif typ == "BoolProperty":
                 pos += 1
-            elif typ in ("ByteProperty", "EnumProperty", "ArrayProperty", "SetProperty"):
+            elif typ in (
+                "ByteProperty",
+                "EnumProperty",
+                "ArrayProperty",
+                "SetProperty",
+            ):
                 inner = self.name_of(d, pos)
                 pos += 8
             elif typ == "MapProperty":
@@ -203,19 +212,31 @@ class Package:
             start = pos
             out.append((size_at, start, start + size, name, typ))
             if typ == "StructProperty" and struct_name not in (
-                    "Vector", "Vector2D", "Rotator", "Quat", "Guid", "LinearColor", "Color",
-                    "SoftObjectPath", "DateTime", "Timespan", "IntPoint"):
+                "Vector",
+                "Vector2D",
+                "Rotator",
+                "Quat",
+                "Guid",
+                "LinearColor",
+                "Color",
+                "SoftObjectPath",
+                "DateTime",
+                "Timespan",
+                "IntPoint",
+            ):
                 self.walk(start, start + size, out)
             elif typ == "ArrayProperty" and inner == "StructProperty":
                 n = struct.unpack_from("<i", d, start)[0]
                 q = start + 4
-                q += 16                                   # inner tag name + type
+                q += 16  # inner tag name + type
                 inner_size_at = q
                 inner_size = struct.unpack_from("<i", d, q)[0]
                 q += 8
                 inner_struct = self.name_of(d, q)
                 q += 24 + 1
-                out.append((inner_size_at, q, q + inner_size, name + "[]", inner_struct))
+                out.append(
+                    (inner_size_at, q, q + inner_size, name + "[]", inner_struct)
+                )
                 for _ in range(n):
                     q = self.walk(q, start + size, out)
             pos = start + size
@@ -223,7 +244,7 @@ class Package:
     def replace(self, at: int, old: bytes, new: bytes) -> None:
         """Replace bytes inside the first export's tagged properties, growing
         every enclosing property tag and the export itself."""
-        if self.e[at:at + len(old)] != old:
+        if self.e[at : at + len(old)] != old:
             raise RuntimeError("asset contents not as expected")
         start, end = self.export_range(0)
         tags: list = []
@@ -231,14 +252,20 @@ class Package:
         delta = len(new) - len(old)
         for size_at, v0, v1, _n, _t in tags:
             if v0 <= at and at + len(old) <= v1:
-                struct.pack_into("<i", self.e, size_at,
-                                 struct.unpack_from("<i", self.e, size_at)[0] + delta)
-        self.e[at:at + len(old)] = new
+                struct.pack_into(
+                    "<i",
+                    self.e,
+                    size_at,
+                    struct.unpack_from("<i", self.e, size_at)[0] + delta,
+                )
+        self.e[at : at + len(old)] = new
         self._grow_export(0, delta)
 
     def _grow_export(self, k: int, delta: int) -> None:
         o = self._export(k) + 28
-        struct.pack_into("<q", self.a, o, struct.unpack_from("<q", self.a, o)[0] + delta)
+        struct.pack_into(
+            "<q", self.a, o, struct.unpack_from("<q", self.a, o)[0] + delta
+        )
         self.exp_delta = getattr(self, "exp_delta", 0) + delta
 
     # -- data tables ------------------------------------------------------------
@@ -273,7 +300,9 @@ class Package:
     # -- output -------------------------------------------------------------
     def build(self) -> tuple[bytes, bytes]:
         a = self.a
-        add = b"".join(fstring(s) + struct.pack("<I", name_hash(s)) for s in self.new_names)
+        add = b"".join(
+            fstring(s) + struct.pack("<I", name_hash(s)) for s in self.new_names
+        )
         grow = len(add)
         exp_delta = getattr(self, "exp_delta", 0)
 
@@ -286,15 +315,28 @@ class Package:
             struct.pack_into("<i", a, self.at["name_count"], len(self.names))
             if self.at["gen_names"] is not None:
                 struct.pack_into("<i", a, self.at["gen_names"], len(self.names))
-            for key in ("gatherable", "import_offset", "depends", "soft_refs", "searchable",
-                        "thumbnails", "asset_registry", "world_tile", "preload"):
+            for key in (
+                "gatherable",
+                "import_offset",
+                "depends",
+                "soft_refs",
+                "searchable",
+                "thumbnails",
+                "asset_registry",
+                "world_tile",
+                "preload",
+            ):
                 bump(self.at[key], grow)
-            struct.pack_into("<i", a, self.at["export_offset"], self.export_offset + grow)
+            struct.pack_into(
+                "<i", a, self.at["export_offset"], self.export_offset + grow
+            )
             struct.pack_into("<i", a, self.at["header"], self.header_size + grow)
             for k in range(self.export_count):
                 o = self._export(k) + 36
                 struct.pack_into("<q", a, o, struct.unpack_from("<q", a, o)[0] + grow)
         bulk = self.at["bulk"]
-        struct.pack_into("<q", a, bulk, struct.unpack_from("<q", a, bulk)[0] + grow + exp_delta)
-        out = a[:self.name_end] + add + a[self.name_end:]
+        struct.pack_into(
+            "<q", a, bulk, struct.unpack_from("<q", a, bulk)[0] + grow + exp_delta
+        )
+        out = a[: self.name_end] + add + a[self.name_end :]
         return bytes(out), bytes(self.e)

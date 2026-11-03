@@ -18,7 +18,10 @@ editions use a different executable and are not supported.
 2. Close the game.
 3. Double-click **`install.bat`**.
 4. Answer one question per mod: **Y** to install it, Enter to skip it. For
-   Autosave After Battle, type the save slot (1-20) it should use.
+   Autosave After Battle, type the save slot (1-20) it should use. Shop Stock
+   asks one question per category (consumables, growth items, essences, misc):
+   **d** game default, **f** free with the game's unlock timing, **i** free and
+   available immediately.
    Run `install.bat` again later to add or remove mods; it shows which ones are
    installed and offers to uninstall all of them.
 5. If it can't find the game automatically, paste your SMT5V folder path when
@@ -45,9 +48,11 @@ Only the installer differs.
    ```
 
    It asks about each mod in turn: **Y** to install it, Enter to skip it. For
-   Autosave After Battle, type the save slot (1-20) it should use. Run it again
-   later to add or remove mods; it shows which ones are installed and offers to
-   uninstall all of them.
+   Autosave After Battle, type the save slot (1-20) it should use. Shop Stock
+   asks one question per category (consumables, growth items, essences, misc):
+   **d** game default, **f** free with the game's unlock timing, **i** free and
+   available immediately. Run it again later to add or remove mods; it shows
+   which ones are installed and offers to uninstall all of them.
 
    If the script can't find the game automatically, it will ask you to paste your
    SMT5V folder path.
@@ -63,13 +68,12 @@ Only the installer differs.
 - **Steam Deck / Linux:** run `./uninstall.sh`.
 
 The uninstall scripts restore the original executable and remove the mod's
-NG+ miracle data pak (`pakchunk99_NGPlusMiracles_P.pak`).
+data paks (`pakchunk9*_*_P.pak`, including `pakchunk99_NGPlusMiracles_P.pak`).
 
 Steam → SMT5V:V → Properties → Installed Files → **Verify integrity of game
-files** also restores the original executable, but leaves the miracle data pak
-behind — if you uninstall that way, also delete
-`Project/Content/Paks/pakchunk99_NGPlusMiracles_P.pak`, or just run the
-uninstall script instead.
+files** also restores the original executable, but leaves the mod's data paks
+behind — if you uninstall that way, delete the `pakchunk9*_*_P.pak` files in
+`Project/Content/Paks` too, or just run the uninstall script instead.
 
 The installer backs up your original executable as
 `SMT5V-Win64-Shipping.exe.original` and does not touch save data, so it is fully
