@@ -45,6 +45,7 @@ set "INST_shop_consumables="
 set "INST_shop_growth="
 set "INST_shop_essences="
 set "INST_shop_misc="
+set "INST_reveal="
 if exist "!STATE!" (
     for /f "usebackq tokens=1,2 delims==" %%A in ("!STATE!") do (
         for %%K in (%BOOL_KEYS%) do if /i "%%A"=="%%K" if "%%B"=="1" set "INST_%%K=1"
@@ -56,6 +57,7 @@ if exist "!STATE!" (
         if /i "%%A"=="shop_growth" set "INST_shop_growth=%%B"
         if /i "%%A"=="shop_essences" set "INST_shop_essences=%%B"
         if /i "%%A"=="shop_misc" set "INST_shop_misc=%%B"
+        if /i "%%A"=="reveal" set "INST_reveal=%%B"
         if /i "%%A"=="shop" if "%%B"=="1" set "INST_shop_growth=immediate"
     )
 )
@@ -69,7 +71,8 @@ for %%C in (consumables growth essences misc) do (
     if defined INST_shop_%%C if /i not "!INST_shop_%%C!"=="default" set "SHOP_INSTALLED=1"
 )
 if defined SHOP_INSTALLED set /a NINST+=1
-set /a NALL=14
+if defined INST_reveal if /i not "!INST_reveal!"=="none" set /a NINST+=1
+set /a NALL=15
 
 :: An install that predates the feature record: the executable differs from
 :: the backup, or a Freeplay data pak is present.
@@ -132,6 +135,7 @@ call :ask_warned jump "Superjump (hold jump to rise, faster air control)"
 call :ask_shop
 call :ask magatsuhi "Full Magatsuhi (gauge full at the start of every battle)"
 call :ask estoma "Free Estoma (barrier costs no Magatsuhi)"
+call :ask_reveal
 call :ask_warned intro "Skip Intro (no logos or opening movie; boot to title menu)"
 call :ask masakado "Masakado Unlock (powered-up Masakado fight without the Kiou Sword)"
 call :ask newborn "Newborn Clears Compendium (NG+ Newborn starts with an empty compendium)"
@@ -151,6 +155,9 @@ for %%C in (consumables growth essences misc) do (
     set "FLAGS=!FLAGS! --shop-%%C !SEL_shop_%%C!"
     if /i not "!SEL_shop_%%C!"=="default" set /a NSEL+=1
 )
+if not defined SEL_reveal set "SEL_reveal=none"
+set "FLAGS=!FLAGS! --reveal !SEL_reveal!"
+if /i not "!SEL_reveal!"=="none" set /a NSEL+=1
 if /i "!SEL_itemhacks!"=="refill" set /a NSEL+=1
 if /i "!SEL_itemhacks!"=="stockpile" (
     set /a NSEL+=1
@@ -256,6 +263,48 @@ for /l %%N in (1,1,20) do if "!A!"=="%%N" set "SEL_autosave=%%N"
 if defined SEL_autosave exit /b 0
 echo    Please enter a slot number from 1 to 20.
 goto :ask_autosave_again
+
+:ask_reveal
+set "CUR=!INST_reveal!"
+if not defined CUR set "CUR=none"
+:ask_reveal_again
+set "A="
+set /p "A=   Map Reveal (treasure / leyline icons) [t]reasures [l]eylines [b]oth [N]one [current: !CUR!]: "
+if not defined A set "A=!CUR!"
+if /i "!A!"=="t" (
+    set "SEL_reveal=treasures"
+    exit /b 0
+)
+if /i "!A!"=="treasures" (
+    set "SEL_reveal=treasures"
+    exit /b 0
+)
+if /i "!A!"=="l" (
+    set "SEL_reveal=leylines"
+    exit /b 0
+)
+if /i "!A!"=="leylines" (
+    set "SEL_reveal=leylines"
+    exit /b 0
+)
+if /i "!A!"=="b" (
+    set "SEL_reveal=both"
+    exit /b 0
+)
+if /i "!A!"=="both" (
+    set "SEL_reveal=both"
+    exit /b 0
+)
+if /i "!A!"=="n" (
+    set "SEL_reveal=none"
+    exit /b 0
+)
+if /i "!A!"=="none" (
+    set "SEL_reveal=none"
+    exit /b 0
+)
+echo    Please enter t, l, b or n.
+goto :ask_reveal_again
 
 :ask_shop
 echo.
@@ -476,6 +525,14 @@ if exist "!GAMEDIR!\Project\Content\Paks\pakchunk99_NGPlusMiracles_P.pak" (
 if exist "!GAMEDIR!\Project\Content\Paks\pakchunk98_FreeplayShop_P.pak" (
     echo  Removing shop data pak...
     del /Q "!GAMEDIR!\Project\Content\Paks\pakchunk98_FreeplayShop_P.pak" >nul 2>nul
+)
+if exist "!GAMEDIR!\Project\Content\Paks\pakchunk92_FreeEstoma_P.pak" (
+    echo  Removing Free Estoma data pak...
+    del /Q "!GAMEDIR!\Project\Content\Paks\pakchunk92_FreeEstoma_P.pak" >nul 2>nul
+)
+if exist "!GAMEDIR!\Project\Content\Paks\pakchunk91_FreeplayReveal_P.pak" (
+    echo  Removing map reveal data pak...
+    del /Q "!GAMEDIR!\Project\Content\Paks\pakchunk91_FreeplayReveal_P.pak" >nul 2>nul
 )
 if exist "!GAMEDIR!\Project\Content\Paks\pakchunk97_FreeplayBoot_P.pak" (
     echo  Removing intro data pak...

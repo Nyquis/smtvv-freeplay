@@ -23,6 +23,7 @@ This reads the committed `pixi.lock` and creates `.pixi/` inside the repo
 | Task | Command | What it does |
 | --- | --- | --- |
 | `patch` | `pixi run patch` | Runs `patch_smtvv_freeplay.py` with the pixi Python |
+| `package` | `pixi run package` | Builds the release zip in `dist/` |
 | `test` | `pixi run test` | Runs the test suite (`pytest tests`) |
 | `lint` | `pixi run lint` | `ruff check` |
 | `fmt` | `pixi run fmt` | `ruff format` — **rewrites files** |
@@ -69,13 +70,26 @@ and `pytest.ini` adds the repository root to the import path.
 ## Lint and format
 
 `ruff.toml` sets `target-version = "py312"` and `line-length = 88`. The
-existing tree is **not** ruff-clean (currently 47 lint findings and 9 files
-that would be reformatted). Do not mass-fix or reformat unrelated files — run
-the tools against the files you touch, e.g. `pixi run lint ue_asset.py`.
+existing tree is **not** fully ruff-clean yet. Do not mass-fix or reformat
+unrelated files — run the tools against the files you touch, e.g.
+`pixi run lint ue_asset.py`.
+
+## Check a game update
+
+```pwsh
+pixi run patch -- --check
+```
+
+This verifies every executable AOB guard and the data tables the mods depend
+on, then stops. It writes nothing — no backup, no `.patched`, no paks. Add the
+feature flags you actually use (for example `--reveal both`) so the report
+matches your install. Run it first after a game update.
 
 ## Release packaging
 
-- Keep `python/`, `repak/` and `DualSenseHaptics` in the release zip.
-- Do not ship `.pixi/` (already ignored).
+- `pixi run package` builds `dist/smtvv-freeplay-<version>.zip` from an explicit
+  allowlist (`package.py`). Commit nothing in `dist/` — it is ignored.
+- Keep `python/`, `repak/` and `DualSenseHaptics` in the zip.
+- Do not ship `.pixi/`, tests, CI files or development docs.
 - Do not make `install.bat` / `install.sh` depend on pixi: end users do not
   have it.

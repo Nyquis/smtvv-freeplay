@@ -10,6 +10,7 @@ pytest = ">=8"
 
 [tasks]
 patch = { cmd = "python patch_smtvv_freeplay.py", description = "Run the patcher (append its flags directly)" }
+package = { cmd = "python package.py", description = "Build the release zip in dist/" }
 test = { cmd = "pytest tests", description = "Run the test suite" }
 lint = { cmd = "ruff check", description = "Lint Python sources (append files to narrow)" }
 fmt = { cmd = "ruff format", description = "Format Python sources (rewrites files)" }

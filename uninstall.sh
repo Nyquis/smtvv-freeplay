@@ -95,6 +95,12 @@ if [ -f "$ESTOMA_PAK" ]; then
     rm -f "$ESTOMA_PAK"
 fi
 
+REVEAL_PAK="$GAMEDIR/Project/Content/Paks/pakchunk91_FreeplayReveal_P.pak"
+if [ -f "$REVEAL_PAK" ]; then
+    echo "Removing map reveal data pak..."
+    rm -f "$REVEAL_PAK"
+fi
+
 if [ -f "$BIN/xinput1_3.dll" ]; then
     if command -v sha256sum >/dev/null 2>&1; then
         existing_hash="$(sha256sum "$BIN/xinput1_3.dll" | awk '{print tolower($1)}')"

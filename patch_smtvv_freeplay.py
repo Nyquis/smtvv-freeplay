@@ -81,6 +81,7 @@ import estoma
 import gameplay_patches
 import newborn
 import quest_pak
+import reveal
 import shop_pak
 import stockpile
 
@@ -88,7 +89,7 @@ import stockpile
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.9.1"
+MOD_VERSION = "5.10.0"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -367,6 +368,40 @@ def build_miracle_pak(game_dir: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def check_tables(game_dir: str, repak: str | None) -> None:
+    """Report the data tables the overrides depend on, without writing."""
+    src = os.path.join(game_dir, PAKS_SUBPATH, SOURCE_PAK)
+    if not os.path.isfile(src):
+        print(f"  [missing] {SOURCE_PAK}")
+        return
+    if repak is None:
+        print("  [skip] bundled repak tool not found")
+        return
+    for label, entry, minimum in (
+        ("GodParameterDataTable", GP_TABLE_ENTRY + ".uexp", 1000),
+        ("ItemTable", shop_pak.ITEM_TABLE + ".uexp", 22000),
+        ("BP_EstomaData", estoma.ESTOMA_ASSET + ".uexp", 208),
+    ):
+        try:
+            blob = run_repak(repak, "get", src, entry)
+        except RuntimeError as exc:
+            print(f"  [missing] {label}: {exc}")
+            continue
+        state = "ok" if len(blob) >= minimum else "size"
+        print(f"  [{state}] {label}: {len(blob):,} bytes")
+    try:
+        listing = run_repak(repak, "list", src).decode(errors="replace")
+        count = sum(
+            1
+            for line in listing.splitlines()
+            if reveal.MINIMAP_PREFIX in line and line.endswith(".uasset")
+        )
+    except RuntimeError as exc:
+        print(f"  [missing] minimap tables: {exc}")
+    else:
+        print(f"  [{'ok' if count else 'missing'}] MinimapIcon tables: {count}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="SMT5V: Vengeance - Freeplay Patcher")
     parser.add_argument(
@@ -431,6 +466,17 @@ def main() -> None:
         "--no-estoma", action="store_true", help="Skip the Free Estoma patch"
     )
     parser.add_argument(
+        "--reveal",
+        choices=reveal.MODES,
+        default="none",
+        help="Map reveal: none, treasures, leylines or both",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Verify the patches against the game without writing anything",
+    )
+    parser.add_argument(
         "--autosave-slot",
         type=int,
         metavar="N",
@@ -438,6 +484,7 @@ def main() -> None:
         help="Save to slot N (1-20) after every battle",
     )
     args = parser.parse_args()
+    check = args.check
 
     do_essences = not args.no_essences
     do_heal = not args.no_heal
@@ -458,6 +505,7 @@ def main() -> None:
     do_shop = shop_pak.has_changes(shop_modes)
     do_newborn = not args.no_newborn
     do_estoma = not args.no_estoma
+    do_reveal = args.reveal != "none"
     autosave_slot = args.autosave_slot
 
     game_dir = locate_game_dir(args.game_dir)
@@ -483,20 +531,22 @@ def main() -> None:
     # the patches selected *this* run: remove it here and rebuild it
     # below only if the miracles patch is enabled and succeeds.
     # ------------------------------------------------------------------
-    for pak in (
-        MIRACLE_PAK,
-        shop_pak.SHOP_PAK,
-        boot_pak.BOOT_PAK,
-        quest_pak.QUEST_PAK,
-        LEGACY_MAP_PAK,
-        newborn.NEWBORN_PAK,
-        stockpile.STOCK_PAK,
-        estoma.ESTOMA_PAK,
-    ):
-        stale_pak = os.path.join(game_dir, PAKS_SUBPATH, pak)
-        if os.path.isfile(stale_pak):
-            print(f"  Removing previous {pak} (rebuilt if selected)")
-            os.remove(stale_pak)
+    if not check:
+        for pak in (
+            MIRACLE_PAK,
+            shop_pak.SHOP_PAK,
+            boot_pak.BOOT_PAK,
+            quest_pak.QUEST_PAK,
+            LEGACY_MAP_PAK,
+            newborn.NEWBORN_PAK,
+            stockpile.STOCK_PAK,
+            estoma.ESTOMA_PAK,
+            reveal.REVEAL_PAK,
+        ):
+            stale_pak = os.path.join(game_dir, PAKS_SUBPATH, pak)
+            if os.path.isfile(stale_pak):
+                print(f"  Removing previous {pak} (rebuilt if selected)")
+                os.remove(stale_pak)
 
     legacy_extract = os.path.join(game_dir, PAKS_SUBPATH, "pakchunk0-WindowsNoEditor")
     if os.path.isdir(legacy_extract):
@@ -512,6 +562,10 @@ def main() -> None:
     with open(source, "rb") as fh:
         data = bytearray(fh.read())
     print(f"  File size: {len(data):,} bytes")
+
+    if check:
+        print("\n  Data tables:")
+        check_tables(game_dir, find_repak())
 
     # ------------------------------------------------------------------
     # Find code cave (shared by all patches)
@@ -529,6 +583,7 @@ def main() -> None:
             ("Essences", do_essences),
             ("Heal", do_heal),
             ("Mimans", do_mimans),
+            ("Reveal", do_reveal),
             ("Miracles", do_miracles),
             ("Compendium", do_compendium),
             ("Refill", do_refill),
@@ -754,8 +809,11 @@ def main() -> None:
         #    (F5=1, F6=0, keep original Glory costs)
         if miracles_ok:
             try:
-                build_miracle_pak(game_dir)
-                print(f"    Data pak      : {MIRACLE_PAK}")
+                if check:
+                    print("    Data pak      : check only")
+                else:
+                    build_miracle_pak(game_dir)
+                    print(f"    Data pak      : {MIRACLE_PAK}")
             except RuntimeError as exc:
                 print(f"    WARNING: NG+ miracle data pak not built — {exc}")
                 print(
@@ -822,10 +880,13 @@ def main() -> None:
             print(f"\n  WARNING: Stockpile skipped - {exc}")
         if stockpile_ok:
             try:
-                stockpile.build_stock_pak(
-                    game_dir, PAKS_SUBPATH, SOURCE_PAK, repak, run_repak
-                )
-                print(f"    Data pak      : {stockpile.STOCK_PAK}")
+                if check:
+                    print("    Data pak      : check only")
+                else:
+                    stockpile.build_stock_pak(
+                        game_dir, PAKS_SUBPATH, SOURCE_PAK, repak, run_repak
+                    )
+                    print(f"    Data pak      : {stockpile.STOCK_PAK}")
             except RuntimeError as exc:
                 print(f"    WARNING: Stockpile data pak not built - {exc}")
 
@@ -900,10 +961,13 @@ def main() -> None:
         try:
             if repak is None:
                 raise RuntimeError("bundled repak tool not found")
-            shop_pak.build_shop_pak(
-                game_dir, PAKS_SUBPATH, SOURCE_PAK, repak, run_repak, shop_modes
-            )
-            print(f"    Data pak      : {shop_pak.SHOP_PAK}")
+            if check:
+                print("    Data pak      : check only")
+            else:
+                shop_pak.build_shop_pak(
+                    game_dir, PAKS_SUBPATH, SOURCE_PAK, repak, run_repak, shop_modes
+                )
+                print(f"    Data pak      : {shop_pak.SHOP_PAK}")
             print(
                 "    Categories    : "
                 + ", ".join(
@@ -925,10 +989,13 @@ def main() -> None:
         try:
             if repak is None:
                 raise RuntimeError("bundled repak tool not found")
-            boot_pak.build_boot_pak(
-                game_dir, PAKS_SUBPATH, SOURCE_PAK, repak, run_repak
-            )
-            print(f"    Data pak      : {boot_pak.BOOT_PAK}")
+            if check:
+                print("    Data pak      : check only")
+            else:
+                boot_pak.build_boot_pak(
+                    game_dir, PAKS_SUBPATH, SOURCE_PAK, repak, run_repak
+                )
+                print(f"    Data pak      : {boot_pak.BOOT_PAK}")
         except RuntimeError as exc:
             print(f"    WARNING: intro data pak not built - {exc}")
         start = next_cave_off
@@ -949,8 +1016,11 @@ def main() -> None:
         try:
             if repak is None:
                 raise RuntimeError("bundled repak tool not found")
-            quest_pak.build_quest_pak(game_dir, PAKS_SUBPATH, repak, run_repak)
-            print(f"    Data pak      : {quest_pak.QUEST_PAK}")
+            if check:
+                print("    Data pak      : check only")
+            else:
+                quest_pak.build_quest_pak(game_dir, PAKS_SUBPATH, repak, run_repak)
+                print(f"    Data pak      : {quest_pak.QUEST_PAK}")
         except RuntimeError as exc:
             print(f"    WARNING: quest data pak not built - {exc}")
 
@@ -971,8 +1041,11 @@ def main() -> None:
             try:
                 if repak is None:
                     raise RuntimeError("bundled repak tool not found")
-                newborn.build_newborn_pak(game_dir, PAKS_SUBPATH, repak, run_repak)
-                print(f"    Data pak      : {newborn.NEWBORN_PAK}")
+                if check:
+                    print("    Data pak      : check only")
+                else:
+                    newborn.build_newborn_pak(game_dir, PAKS_SUBPATH, repak, run_repak)
+                    print(f"    Data pak      : {newborn.NEWBORN_PAK}")
             except RuntimeError as exc:
                 print(f"    WARNING: carry-over text pak not built - {exc}")
 
@@ -984,18 +1057,46 @@ def main() -> None:
         try:
             if repak_tool is None:
                 raise RuntimeError("bundled repak tool not found")
-            old_costs = estoma.build_estoma_pak(
-                game_dir, PAKS_SUBPATH, SOURCE_PAK, repak_tool, run_repak
-            )
             patch_num += 1
             print(f"\n  [{patch_num}/{total}] Free Estoma")
-            print(f"    Data pak      : {estoma.ESTOMA_PAK}")
-            print(
-                "    Costs zeroed  : "
-                + ", ".join(f"{name}={value}" for name, value in old_costs.items())
-            )
+            if check:
+                print("    Data pak      : check only")
+            else:
+                old_costs = estoma.build_estoma_pak(
+                    game_dir, PAKS_SUBPATH, SOURCE_PAK, repak_tool, run_repak
+                )
+                print(f"    Data pak      : {estoma.ESTOMA_PAK}")
+                print(
+                    "    Costs zeroed  : "
+                    + ", ".join(f"{name}={value}" for name, value in old_costs.items())
+                )
         except RuntimeError as exc:
             print(f"\n  WARNING: Free Estoma skipped - {exc}")
+
+    # ==================================================================
+    # PATCH: Map Reveal (data pak only)
+    # ==================================================================
+    if do_reveal:
+        patch_num += 1
+        print(f"\n  [{patch_num}/{total}] Map Reveal")
+        repak = find_repak()
+        try:
+            if repak is None:
+                raise RuntimeError("bundled repak tool not found")
+            if check:
+                print("    Data pak      : check only")
+            else:
+                changed = reveal.build_reveal_pak(
+                    game_dir, PAKS_SUBPATH, SOURCE_PAK, repak, run_repak, args.reveal
+                )
+                print(f"    Data pak      : {reveal.REVEAL_PAK}")
+                print(f"    Icons revealed: {changed}")
+        except RuntimeError as exc:
+            print(f"    WARNING: map reveal pak not built - {exc}")
+
+    if check:
+        print("\n  Check complete - nothing was written.")
+        return
 
     # ------------------------------------------------------------------
     # Backup & save
@@ -1031,6 +1132,7 @@ def main() -> None:
     lines.append(f"autosave={autosave_slot or 0}")
     for category, mode in shop_modes.items():
         lines.append(f"shop_{category}={mode}")
+    lines.append(f"reveal={args.reveal}")
     with open(
         os.path.join(os.path.dirname(out_path), FEATURES_FILE + ".new"),
         "w",

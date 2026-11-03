@@ -2,7 +2,7 @@
 
 Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
 
-**Current version: 5.9.1**
+**Current version: 5.10.0**
 
 ## Features
 
@@ -74,6 +74,9 @@ Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
     keeping it through moon phases leave the gauge untouched. Estoma Field I
     still has to be learned, and Estoma Field II becomes redundant.
 
+16. **Map Reveal** - treasure chests and/or leyline founts are marked on the
+    map from farther away. Fog of war still hides icons in unexplored areas.
+
 ## Requirements
 
 - Shin Megami Tensei V: Vengeance — the **Steam** version, on Windows or
@@ -100,9 +103,9 @@ See **[INSTALL.md](INSTALL.md)** for the full step-by-step. Quick version below.
 3. Answer one question per mod (Reusable Essences, Leyline Auto-Heal, Miman
    Reveal, NG+ Miracles, Free Compendium, Item Hacks (Battle Refill or
    Stockpile), Superjump, Shop Stock (one question per category), Full
-   Magatsuhi, Free Estoma, Skip Intro, Masakado Unlock, Newborn Clears
-   Compendium, Autosave After Battle, DualSense Haptics). Press Enter to skip
-   a mod.
+   Magatsuhi, Free Estoma, Map Reveal, Skip Intro, Masakado Unlock, Newborn
+   Clears Compendium, Autosave After Battle, DualSense Haptics). Press Enter to
+   skip a mod.
 
    Run `install.bat` again later to add or remove mods: it shows which ones
    are installed, offers to uninstall all of them first, and otherwise asks
@@ -172,11 +175,13 @@ Optional patch flags:
 --shop-misc {default,free,immediate}
 --no-magatsuhi
 --no-estoma
+--reveal {none,treasures,leylines,both}
 --no-intro
 --no-masakado
 --no-newborn
 --autosave-slot N
 --game-dir PATH
+--check
 ```
 
 `patch_essences.py` is kept as a compatibility wrapper for older instructions.
@@ -205,6 +210,8 @@ Nothing needs to be compiled to *use* this bundle — the executable patcher
 `python/`, and prebuilt [repak](https://github.com/trumank/repak) binaries are
 bundled in `repak/` (win64 + linux64, v0.2.3, dual MIT/Apache-2.0 — see
 `repak/LICENSE-MIT` and `repak/LICENSE-APACHE`).
+
+`pixi run package` builds the release zip; see `DEVELOPMENT.md`.
 
 ## How It Works
 
@@ -290,6 +297,14 @@ summon and moon-phase costs, plus the reduced pair used after Estoma Field II.
 A small override pak built from your own `pakchunk0` sets all four to zero,
 so the barrier never touches the gauge. Estoma Field I still has to be
 learned. The uninstallers remove the pak.
+
+### Map Reveal
+
+Treasure and leyline icons live in per-area `MinimapIcon_*` tables. A small
+override pak built from your own `pakchunk0` sets the `ShowFar` flag on the
+rows you chose, so the icons appear from farther away. The fog-of-war mask is
+not touched: icons in unexplored areas stay hidden. The uninstallers remove
+the pak.
 
 ### Autosave After Battle
 
