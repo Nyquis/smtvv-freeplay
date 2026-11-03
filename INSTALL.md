@@ -2,7 +2,7 @@
 
 A quality-of-life patch bundle for *Shin Megami Tensei V: Vengeance*: Reusable
 Essences, Leyline Auto-Heal, Miman Reveal, NG+ Miracles From Start, Free Compendium,
-Item Hacks (Battle Refill or Stockpile), Superjump, Free Growth Items, Full Magatsuhi,
+Item Hacks (Battle Refill or Stockpile), Superjump, Shop Stock, Full Magatsuhi,
 Free Estoma, Skip Intro, Masakado Unlock, Newborn Clears Compendium, (optional)
 Autosave After Battle, and DualSense Haptics (Windows only).
 

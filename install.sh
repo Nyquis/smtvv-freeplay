@@ -15,8 +15,9 @@
 # Scripted use: patch flags skip the questions and are passed to the patcher
 # (every mod is installed unless switched off):
 #   --no-essences  --no-heal  --no-mimans  --no-miracles  --no-compendium
-#   --no-refill  --no-jump  --no-shop  --no-magatsuhi  --no-intro  --no-masakado
-#   --no-newborn
+#   --no-refill  --no-jump  --no-magatsuhi  --no-intro  --no-masakado
+#   --no-newborn  --no-shop
+#   --shop-consumables default|free|immediate   (same for growth, essences, misc)
 #   --stockpile    (Stockpile instead of Battle Refill)
 #   --autosave-slot N   (save to slot N, 1-20, after every battle; off by default)
 #
@@ -122,7 +123,7 @@ uninstall_all() {
 
 # --- Questions (skipped when patch flags are given) ---
 if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
-    BOOL_KEYS=(essences heal mimans miracles compendium jump shop magatsuhi intro masakado newborn estoma)
+    BOOL_KEYS=(essences heal mimans miracles compendium jump magatsuhi intro masakado newborn estoma)
     declare -A DESC=(
         [essences]="Reusable Essences (essences not consumed)"
         [heal]="Leyline Auto-Heal (full HP/MP on leyline use)"
@@ -130,7 +131,6 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
         [miracles]="NG+ Miracles (unlock NG+ miracles early)"
         [compendium]="Free Compendium (compendium summons cost nothing)"
         [jump]="Superjump (hold jump to rise, faster air control)"
-        [shop]="Free Growth Items (Gospels, Grimoires, Sutras, Balms, Incenses free in shop)"
         [magatsuhi]="Full Magatsuhi (gauge full at the start of every battle)"
         [estoma]="Free Estoma (barrier costs no Magatsuhi)"
         [intro]="Skip Intro (no logos or opening movie; boot to title menu)"
@@ -138,6 +138,8 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
         [newborn]="Newborn Clears Compendium (NG+ Newborn starts with an empty compendium)"
     )
     declare -A INST=()
+    declare -A INST_SHOP=()
+    declare -A SEL_SHOP=()
     INST_ITEMS=""
     INST_AUTOSAVE=""
     if [ -f "$STATE" ]; then
@@ -146,6 +148,10 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
             case "$k" in
                 itemhacks) case "$v" in refill|stockpile) INST_ITEMS="$v" ;; esac ;;
                 autosave) [[ "$v" =~ ^([1-9]|1[0-9]|20)$ ]] && INST_AUTOSAVE="$v" ;;
+                shop) [ "$v" = "1" ] && INST_SHOP[growth]=immediate ;;
+                shop_consumables|shop_growth|shop_essences|shop_misc)
+                    scat="${k#shop_}"
+                    case "$v" in default|free|immediate) INST_SHOP[$scat]="$v" ;; esac ;;
                 *) for b in "${BOOL_KEYS[@]}"; do [ "$k" = "$b" ] && [ "$v" = "1" ] && INST[$k]=1; done ;;
             esac
         done < "$STATE"
@@ -153,6 +159,13 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
     NINST=${#INST[@]}
     [ -n "$INST_ITEMS" ] && NINST=$((NINST + 1))
     [ -n "$INST_AUTOSAVE" ] && NINST=$((NINST + 1))
+    SHOP_INSTALLED=""
+    for scat in consumables growth essences misc; do
+        if [ -n "${INST_SHOP[$scat]:-}" ] && [ "${INST_SHOP[$scat]}" != "default" ]; then
+            SHOP_INSTALLED=1
+        fi
+    done
+    [ -n "$SHOP_INSTALLED" ] && NINST=$((NINST + 1))
     NALL=13
 
     # An install that predates the feature record.
@@ -262,12 +275,37 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
         done
     }
 
+    ask_shop() {
+        local spec cat label cur A
+        echo "  Shop stock - choose a mode per category:"
+        echo "    d = game default,  f = free with default timing,"
+        echo "    i = free and available immediately"
+        for spec in "consumables:Consumables (1-81)" \
+                    "growth:Growth items (82-108)" \
+                    "essences:Essences (311-615, buy price only)" \
+                    "misc:Misc (109-113: Glory Crystals, Demon Boxes, Tablet)"; do
+            cat="${spec%%:*}"; label="${spec#*:}"
+            cur="${INST_SHOP[$cat]:-default}"
+            while true; do
+                read -r -p "  $label [d]efault [f]ree [i]mmediate [current: $cur]: " A
+                if [ -z "$A" ]; then A="$cur"; fi
+                case "$A" in
+                    d|D|default) SEL_SHOP[$cat]=default; break ;;
+                    f|F|free) SEL_SHOP[$cat]=free; break ;;
+                    i|I|immediate) SEL_SHOP[$cat]=immediate; break ;;
+                    *) echo "  Please enter d, f or i." ;;
+                esac
+            done
+        done
+    }
+
     SEL_ITEMS=none
     SEL_AUTOSAVE=""
     for k in essences heal mimans miracles compendium; do ask "$k"; done
     ask_items
     ask_warned jump
-    for k in shop magatsuhi estoma; do ask "$k"; done
+    ask_shop
+    for k in magatsuhi estoma; do ask "$k"; done
     ask_warned intro
     for k in masakado newborn; do ask "$k"; done
     ask_autosave
@@ -275,6 +313,10 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
     NSEL=0
     for k in "${BOOL_KEYS[@]}"; do
         if [ -n "${SEL[$k]:-}" ]; then NSEL=$((NSEL + 1)); else PATCH_FLAGS+=("--no-$k"); fi
+    done
+    for cat in consumables growth essences misc; do
+        PATCH_FLAGS+=("--shop-$cat" "${SEL_SHOP[$cat]}")
+        if [ "${SEL_SHOP[$cat]}" != "default" ]; then NSEL=$((NSEL + 1)); fi
     done
     case "$SEL_ITEMS" in
         refill) NSEL=$((NSEL + 1)) ;;

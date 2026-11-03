@@ -35,12 +35,16 @@ if not defined BINDIR (
 for %%I in ("!BINDIR!\..\..\..") do set "GAMEDIR=%%~fI"
 
 :: --- What is installed now ---
-set "BOOL_KEYS=essences heal mimans miracles compendium jump shop magatsuhi intro masakado newborn estoma"
+set "BOOL_KEYS=essences heal mimans miracles compendium jump magatsuhi intro masakado newborn estoma"
 set "STATE=!BINDIR!\Freeplay.features"
 for %%K in (%BOOL_KEYS%) do set "INST_%%K="
 set "INST_itemhacks="
 set "INST_autosave="
 set "INST_haptics="
+set "INST_shop_consumables="
+set "INST_shop_growth="
+set "INST_shop_essences="
+set "INST_shop_misc="
 if exist "!STATE!" (
     for /f "usebackq tokens=1,2 delims==" %%A in ("!STATE!") do (
         for %%K in (%BOOL_KEYS%) do if /i "%%A"=="%%K" if "%%B"=="1" set "INST_%%K=1"
@@ -48,6 +52,11 @@ if exist "!STATE!" (
         if /i "%%A"=="itemhacks" if /i "%%B"=="stockpile" set "INST_itemhacks=stockpile"
         if /i "%%A"=="autosave" for /l %%N in (1,1,20) do if "%%B"=="%%N" set "INST_autosave=%%N"
         if /i "%%A"=="haptics" if "%%B"=="1" set "INST_haptics=1"
+        if /i "%%A"=="shop_consumables" set "INST_shop_consumables=%%B"
+        if /i "%%A"=="shop_growth" set "INST_shop_growth=%%B"
+        if /i "%%A"=="shop_essences" set "INST_shop_essences=%%B"
+        if /i "%%A"=="shop_misc" set "INST_shop_misc=%%B"
+        if /i "%%A"=="shop" if "%%B"=="1" set "INST_shop_growth=immediate"
     )
 )
 set /a NINST=0
@@ -55,6 +64,11 @@ for %%K in (%BOOL_KEYS%) do if defined INST_%%K set /a NINST+=1
 if defined INST_itemhacks set /a NINST+=1
 if defined INST_autosave set /a NINST+=1
 if defined INST_haptics set /a NINST+=1
+set "SHOP_INSTALLED="
+for %%C in (consumables growth essences misc) do (
+    if defined INST_shop_%%C if /i not "!INST_shop_%%C!"=="default" set "SHOP_INSTALLED=1"
+)
+if defined SHOP_INSTALLED set /a NINST+=1
 set /a NALL=14
 
 :: An install that predates the feature record: the executable differs from
@@ -115,7 +129,7 @@ call :ask miracles "NG+ Miracles (unlock NG+ miracles early)"
 call :ask compendium "Free Compendium (compendium summons cost nothing)"
 call :ask_items
 call :ask_warned jump "Superjump (hold jump to rise, faster air control)"
-call :ask shop "Free Growth Items (Gospels, Grimoires, Sutras, Balms, Incenses free in shop)"
+call :ask_shop
 call :ask magatsuhi "Full Magatsuhi (gauge full at the start of every battle)"
 call :ask estoma "Free Estoma (barrier costs no Magatsuhi)"
 call :ask_warned intro "Skip Intro (no logos or opening movie; boot to title menu)"
@@ -132,6 +146,10 @@ for %%K in (%BOOL_KEYS%) do (
     ) else (
         set "FLAGS=!FLAGS! --no-%%K"
     )
+)
+for %%C in (consumables growth essences misc) do (
+    set "FLAGS=!FLAGS! --shop-%%C !SEL_shop_%%C!"
+    if /i not "!SEL_shop_%%C!"=="default" set /a NSEL+=1
 )
 if /i "!SEL_itemhacks!"=="refill" set /a NSEL+=1
 if /i "!SEL_itemhacks!"=="stockpile" (
@@ -238,6 +256,53 @@ for /l %%N in (1,1,20) do if "!A!"=="%%N" set "SEL_autosave=%%N"
 if defined SEL_autosave exit /b 0
 echo    Please enter a slot number from 1 to 20.
 goto :ask_autosave_again
+
+:ask_shop
+echo.
+echo    Shop stock - choose a mode per category:
+echo      d = game default,  f = free with default timing,
+echo      i = free and available immediately
+call :ask_shop_cat consumables "Consumables (1-81)"
+call :ask_shop_cat growth "Growth items (82-108)"
+call :ask_shop_cat essences "Essences (311-615, buy price only)"
+call :ask_shop_cat misc "Misc (109-113: Glory Crystals, Demon Boxes, Tablet)"
+exit /b 0
+
+:ask_shop_cat
+set "CAT=%~1"
+set "LABEL=%~2"
+set "CUR=!INST_shop_%CAT%!"
+if not defined CUR set "CUR=default"
+:ask_shop_cat_again
+set "A="
+set /p "A=   %LABEL% [d]efault [f]ree [i]mmediate [current: !CUR!]: "
+if not defined A set "A=!CUR!"
+if /i "!A!"=="d" (
+    set "SEL_shop_!CAT!=default"
+    exit /b 0
+)
+if /i "!A!"=="default" (
+    set "SEL_shop_!CAT!=default"
+    exit /b 0
+)
+if /i "!A!"=="f" (
+    set "SEL_shop_!CAT!=free"
+    exit /b 0
+)
+if /i "!A!"=="free" (
+    set "SEL_shop_!CAT!=free"
+    exit /b 0
+)
+if /i "!A!"=="i" (
+    set "SEL_shop_!CAT!=immediate"
+    exit /b 0
+)
+if /i "!A!"=="immediate" (
+    set "SEL_shop_!CAT!=immediate"
+    exit /b 0
+)
+echo    Please enter d, f or i.
+goto :ask_shop_cat_again
 
 :run_patcher
 echo.

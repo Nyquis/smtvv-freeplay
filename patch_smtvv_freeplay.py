@@ -30,9 +30,9 @@ Applies quality-of-life patches to the game executable and optional data paks:
   7. Superjump  -- hold jump to keep rising; faster air movement and
      near-instant turning while airborne.
 
-  8. Free Growth Items  -- Gospels, Grimoires, Sutras, Balms and Incenses
-     are sold from the start for 0 Macca (data pak built from the player's
-     game files).
+  8. Shop Stock  -- per-category shop pricing and availability for
+     consumables, growth items, essences and misc items (data pak built from
+     the player's game files).
 
   9. Full Magatsuhi  -- the Magatsuhi gauge is filled at the start of every
      battle.
@@ -88,12 +88,11 @@ import estoma  # noqa: E402
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.8.0"
+MOD_VERSION = "5.9.0"
 FEATURES_FILE = "Freeplay.features"   # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
 EXE_SUBPATH = os.path.join("Project", "Binaries", "Win64", EXE_NAME)
-STEAM_APPID = "1546720"
 
 # NG+ miracle data pak: built at install time from the user's own game data.
 # GodParameterDataTable is extracted from pakchunk0 with the bundled repak
@@ -358,7 +357,12 @@ def main() -> None:
     parser.add_argument("--no-magatsuhi", action="store_true",
                         help="Skip the Full Magatsuhi patch")
     parser.add_argument("--no-shop", action="store_true",
-                        help="Skip the Free Growth Items shop patch")
+                        help="Leave the shop stock and prices untouched")
+    for _category in shop_pak.CATEGORIES:
+        parser.add_argument(
+            f"--shop-{_category}", choices=shop_pak.MODES,
+            default="immediate" if _category == "growth" else "default",
+            help=f"Shop {_category}: default, free or immediate")
     parser.add_argument("--no-jump", action="store_true",
                         help="Skip the Superjump patch")
     parser.add_argument("--no-markers", action="store_true",
@@ -383,7 +387,11 @@ def main() -> None:
     do_magatsuhi = not args.no_magatsuhi
     do_intro = not args.no_intro
     do_masakado = not args.no_masakado
-    do_shop = not args.no_shop
+    shop_modes = {category: getattr(args, f"shop_{category}")
+                  for category in shop_pak.CATEGORIES}
+    if args.no_shop:
+        shop_modes = {category: "default" for category in shop_pak.CATEGORIES}
+    do_shop = shop_pak.has_changes(shop_modes)
     do_newborn = not args.no_newborn
     do_estoma = not args.no_estoma
     autosave_slot = args.autosave_slot
@@ -775,17 +783,21 @@ def main() -> None:
             print(f"\n  WARNING: Autosave skipped - {exc}")
 
     # ==================================================================
-    # PATCH: Free Growth Items (data pak only)
+    # PATCH: Shop stock and prices (data pak only)
     # ==================================================================
     if do_shop:
         patch_num += 1
-        print(f"\n  [{patch_num}/{total}] Free Growth Items")
+        print(f"\n  [{patch_num}/{total}] Shop stock")
         repak = find_repak()
         try:
             if repak is None:
                 raise RuntimeError("bundled repak tool not found")
-            shop_pak.build_shop_pak(game_dir, PAKS_SUBPATH, SOURCE_PAK, repak, run_repak)
+            shop_pak.build_shop_pak(game_dir, PAKS_SUBPATH, SOURCE_PAK, repak,
+                                    run_repak, shop_modes)
             print(f"    Data pak      : {shop_pak.SHOP_PAK}")
+            print("    Categories    : " + ", ".join(
+                f"{category}={mode}" for category, mode in shop_modes.items()
+                if mode != "default"))
         except RuntimeError as exc:
             print(f"    WARNING: shop data pak not built - {exc}")
 
@@ -881,12 +893,14 @@ def main() -> None:
     # patched executable is in place.
     features = {"essences": do_essences, "heal": do_heal, "mimans": do_mimans,
                 "miracles": do_miracles, "compendium": do_compendium, "jump": do_jump,
-                "shop": do_shop, "magatsuhi": do_magatsuhi, "intro": do_intro,
+                "magatsuhi": do_magatsuhi, "intro": do_intro,
                 "masakado": do_masakado, "newborn": do_newborn,
                 "estoma": do_estoma}
     lines = [f"{k}={int(v)}" for k, v in features.items()]
     lines.append("itemhacks=" + ("stockpile" if do_stockpile else "refill" if do_refill else "none"))
     lines.append(f"autosave={autosave_slot or 0}")
+    for category, mode in shop_modes.items():
+        lines.append(f"shop_{category}={mode}")
     with open(os.path.join(os.path.dirname(out_path), FEATURES_FILE + ".new"), "w",
               newline="\r\n") as fh:
         fh.write("\n".join(lines) + "\n")

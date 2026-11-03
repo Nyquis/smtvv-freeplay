@@ -26,7 +26,6 @@ import tempfile
 import ue_asset
 
 ESTOMA_PAK = "pakchunk92_FreeEstoma_P.pak"
-ESTOMA_SOURCE_PAK = "pakchunk0-WindowsNoEditor.pak"
 ESTOMA_ASSET = "Project/Content/Blueprints/Map/Encount/Estoma/BP_EstomaData"
 
 # The "Light" pair is used after Estoma Field II is learned, so all four have

@@ -2,7 +2,7 @@
 
 Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
 
-**Current version: 5.8.0**
+**Current version: 5.9.0**
 
 ## Features
 
@@ -36,8 +36,9 @@ Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
    story triggers, which are not always marked on the map; if events aren't
    triggering after flying over terrain, backtrack and walk.
 
-8. **Free Growth Items** - Gospels, Grimoires, all Sutras, Balms and Incenses
-   are sold in the shop from the start of the game for 0 Macca.
+8. **Shop Stock** - choose per category (consumables, growth items, essences,
+   misc) whether stock is free and whether it appears immediately. The growth
+   category covers Gospels, Grimoires, Sutras, Balms and Incenses.
 
 9. **Full Magatsuhi** - every battle starts with a full Magatsuhi gauge.
    Magatsuhi gain during battle is unchanged.
@@ -98,9 +99,10 @@ See **[INSTALL.md](INSTALL.md)** for the full step-by-step. Quick version below.
 
 3. Answer one question per mod (Reusable Essences, Leyline Auto-Heal, Miman
    Reveal, NG+ Miracles, Free Compendium, Item Hacks (Battle Refill or
-   Stockpile), Superjump, Free Growth Items, Full Magatsuhi, Free Estoma,
-   Skip Intro, Masakado Unlock, Newborn Clears Compendium, Autosave After
-   Battle, DualSense Haptics). Press Enter to skip a mod.
+   Stockpile), Superjump, Shop Stock (one question per category), Full
+   Magatsuhi, Free Estoma, Skip Intro, Masakado Unlock, Newborn Clears
+   Compendium, Autosave After Battle, DualSense Haptics). Press Enter to skip
+   a mod.
 
    Run `install.bat` again later to add or remove mods: it shows which ones
    are installed, offers to uninstall all of them first, and otherwise asks
@@ -163,6 +165,10 @@ Optional patch flags:
 --no-refill
 --no-jump
 --no-shop
+--shop-consumables {default,free,immediate}
+--shop-growth {default,free,immediate}
+--shop-essences {default,free,immediate}
+--shop-misc {default,free,immediate}
 --no-magatsuhi
 --no-estoma
 --no-intro
@@ -223,13 +229,28 @@ shows without changing save data.
 The demon-cost formula behind every compendium summon price is patched to
 return 0, so the compendium shows and charges 0 Macca.
 
-### Free Growth Items
+### Shop Stock
 
 Like the NG+ miracle pak, this is a small override pak built at install time
-from your own `pakchunk0`: the item table's buying price for Gospels,
-Grimoires, Sutras, Balms and Incenses is set to 0, their shop unlock
-conditions are cleared, and shop entries are added for those the shop never
-stocks. The uninstallers remove the pak.
+from your own `pakchunk0`. Four categories can be set independently:
+
+| Category | Items |
+| --- | --- |
+| Consumables | 1-81 |
+| Growth items | 82-108: Gospels, Grimoires, Sutras, Balms, Incenses |
+| Essences | 311-615 |
+| Misc | 109-113: Glory Crystals, Demon Boxes, New Testament Tablet |
+
+Each category has one of three modes:
+
+- **Game default** - nothing changes.
+- **Free, default game timing** - buying and selling prices are set to 0, but
+  the items keep the shop's original unlock conditions and stock list.
+- **Free, available immediately** - prices are set to 0, unlock conditions are
+  cleared, and missing entries are added for growth items and misc items.
+
+Essences have no selling price (the game does not sell them), so only their
+buying price is cleared. The uninstallers remove the pak.
 
 ### Skip Intro
 
@@ -359,4 +380,6 @@ You are free to use, modify, and redistribute it.
 The bundled portable Python runtime in `python/` is distributed under the Python
 Software Foundation License (see `python/LICENSE.txt`). The bundled `repak`
 tool in `repak/` is distributed under its dual MIT/Apache-2.0 license (see
-`repak/LICENSE-MIT` and `repak/LICENSE-APACHE`).
+`repak/LICENSE-MIT` and `repak/LICENSE-APACHE`). The bundled DualSense Haptics
+bridge includes third-party .NET libraries; see
+`haptics/DualSenseHaptics/licenses/THIRD-PARTY-NOTICES.md`.
