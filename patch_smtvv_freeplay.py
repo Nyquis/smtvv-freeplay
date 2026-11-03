@@ -89,7 +89,7 @@ import stockpile
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.10.0"
+MOD_VERSION = "5.10.1"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -274,6 +274,17 @@ def find_repak() -> str | None:
     return shutil.which("repak")
 
 
+def _repak_error_message(err: str) -> str:
+    """Turn repak's stderr into a user-facing reason."""
+    if "oodle" in err.lower():
+        return (
+            "repak needs the Oodle runtime (oo2core_9_win64.dll), which it "
+            "downloads on first use. Allow repak.exe through the firewall and "
+            "run the installer again; later runs work offline."
+        )
+    return err or "unknown error"
+
+
 def run_repak(repak: str, *args: str) -> bytes:
     """Run repak, returning stdout bytes. Raises RuntimeError on failure."""
     import subprocess
@@ -284,7 +295,7 @@ def run_repak(repak: str, *args: str) -> bytes:
         raise RuntimeError(f"could not run repak: {exc}") from exc
     if proc.returncode != 0:
         err = proc.stderr.decode(errors="replace").strip()
-        raise RuntimeError(f"repak {args[0]} failed: {err or 'unknown error'}")
+        raise RuntimeError(f"repak {args[0]} failed: {_repak_error_message(err)}")
     return proc.stdout
 
 

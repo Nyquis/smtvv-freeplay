@@ -11,6 +11,11 @@ Autosave After Battle, and DualSense Haptics (Windows only).
 Linux (via Proton). Close the game before installing. Game Pass / Microsoft Store
 editions use a different executable and are not supported.
 
+Internet is needed once on the first install: repak downloads the Oodle runtime
+to read the game's compressed paks. It is cached afterwards, so later installs
+work offline. If a firewall blocks it, allow `repak.exe` and run the installer
+again.
+
 ---
 
 ## Windows

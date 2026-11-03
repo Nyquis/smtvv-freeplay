@@ -14,6 +14,7 @@ as a small override pak.
 
 from __future__ import annotations
 
+import glob
 import os
 import shutil
 import struct
@@ -22,7 +23,8 @@ import tempfile
 import ue_asset
 
 REVEAL_PAK = "pakchunk91_FreeplayReveal_P.pak"
-MINIMAP_PREFIX = "Project/Content/Blueprints/Gamedata/BinTable/Minimap/MinimapIcon_"
+MINIMAP_DIR = "Project/Content/Blueprints/Gamedata/BinTable/Minimap"
+MINIMAP_PREFIX = MINIMAP_DIR + "/MinimapIcon_"
 POI_TREASURE = "E_MINIMAP_POI_TYPE_TREASURE"
 POI_RYUKETSU = "E_MINIMAP_POI_TYPE_RYUKETSU"
 MODES = ("none", "treasures", "leylines", "both")
@@ -121,31 +123,35 @@ def build_reveal_pak(
     if not os.path.isfile(src):
         raise RuntimeError(f"{source_pak} not found in {paks_dir}")
 
-    listing = run_repak(repak, "list", src).decode(errors="replace")
-    entries = [
-        line.strip()
-        for line in listing.splitlines()
-        if line.strip().startswith(MINIMAP_PREFIX) and line.strip().endswith(".uasset")
-    ]
-    if not entries:
-        raise RuntimeError("no minimap icon tables found in pakchunk0")
-
-    staging = tempfile.mkdtemp(prefix="smtvv_reveal_")
+    extract = tempfile.mkdtemp(prefix="smtvv_reveal_src_")
+    staging = tempfile.mkdtemp(prefix="smtvv_reveal_pak_")
     modified = 0
     changed = 0
     try:
-        for asset_entry in entries:
-            base = asset_entry[: -len(".uasset")]
-            uasset = run_repak(repak, "get", src, asset_entry)
-            uexp = run_repak(repak, "get", src, base + ".uexp")
+        # One unpack is much cheaper than two repak get calls per table: each
+        # get re-reads the whole pak index (~0.2s on the 12.9 GB pakchunk0).
+        run_repak(repak, "unpack", "-q", "-o", extract, "-i", MINIMAP_DIR, src)
+
+        table_dir = os.path.join(extract, *MINIMAP_DIR.split("/"))
+        assets = sorted(glob.glob(os.path.join(table_dir, "MinimapIcon_*.uasset")))
+        if not assets:
+            raise RuntimeError("no minimap icon tables extracted from pakchunk0")
+
+        for asset in assets:
+            base = asset[: -len(".uasset")]
+            with open(asset, "rb") as fh:
+                uasset = fh.read()
+            with open(base + ".uexp", "rb") as fh:
+                uexp = fh.read()
             pkg = ue_asset.Package(uasset, uexp)
             rows = reveal_table(pkg, mode)
             if not rows:
                 continue
             modified += 1
             changed += rows
+            rel = os.path.relpath(base, extract)
             for suffix, blob in ((".uasset", pkg.a), (".uexp", pkg.e)):
-                path = os.path.join(staging, *(base + suffix).split("/"))
+                path = os.path.join(staging, rel + suffix)
                 os.makedirs(os.path.dirname(path), exist_ok=True)
                 with open(path, "wb") as fh:
                     fh.write(blob)
@@ -162,5 +168,6 @@ def build_reveal_pak(
             if os.path.isfile(tmp):
                 os.remove(tmp)
     finally:
+        shutil.rmtree(extract, ignore_errors=True)
         shutil.rmtree(staging, ignore_errors=True)
     return changed

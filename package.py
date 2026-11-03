@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import re
 import zipfile
 from pathlib import Path
@@ -43,6 +44,13 @@ INCLUDE_FILES = (
 INCLUDE_DIRS = ("python", "repak", "haptics")
 EXECUTABLES = {"install.sh", "uninstall.sh", "repak/linux64/repak"}
 FIXED_TIME = (2020, 1, 1, 0, 0, 0)
+# Local runtime files that must never ship: the Oodle DLL is downloaded by
+# repak on first use and is not redistributable.
+EXCLUDE_PATTERNS = ("oo2core_*.dll", "*.pdb", "*.exp", "*.lib", "*.obj")
+
+
+def _excluded(path: Path) -> bool:
+    return any(fnmatch.fnmatch(path.name, pattern) for pattern in EXCLUDE_PATTERNS)
 
 
 def version() -> str:
@@ -64,7 +72,7 @@ def iter_files():
         if not base.is_dir():
             raise RuntimeError(f"missing release directory: {name}")
         for path in sorted(base.rglob("*")):
-            if path.is_file():
+            if path.is_file() and not _excluded(path):
                 rel = path.relative_to(ROOT).as_posix()
                 yield path, f"{ARCHIVE_ROOT}/{rel}"
 

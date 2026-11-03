@@ -2,7 +2,7 @@
 
 Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
 
-**Current version: 5.10.0**
+**Current version: 5.10.1**
 
 ## Features
 
@@ -84,9 +84,13 @@ Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
   different executable and are not supported.
 - No separate Python install is required when using the packaged release.
   A portable Python runtime is included (Windows); on Linux it uses `python3`.
-- Nothing else to download: the [repak](https://github.com/trumank/repak)
+- Nothing else to install: the [repak](https://github.com/trumank/repak)
   pak tool used by the NG+ Miracles patch is bundled (`repak/`, MIT/Apache-2.0
   licensed) for both Windows and Linux/Steam Deck.
+- **Internet is needed once on the first install.** repak downloads the Oodle
+  runtime (`oo2core_9_win64.dll`) to read the game's compressed paks. It is
+  cached in `repak/win64/`, so later runs work offline. If a firewall blocks
+  it, allow `repak.exe` and run the installer again.
 
 See **[INSTALL.md](INSTALL.md)** for the full step-by-step. Quick version below.
 

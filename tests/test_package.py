@@ -46,3 +46,10 @@ def test_shell_scripts_keep_the_executable_bit(tmp_path):
         repak = archive.getinfo("SMTVV Freeplay/repak/linux64/repak")
     assert info.external_attr >> 16 == 0o755
     assert repak.external_attr >> 16 == 0o755
+
+
+def test_local_runtime_files_are_excluded(tmp_path):
+    _, path, _ = package.build_zip(tmp_path / "release.zip")
+    names = _names(path)
+    assert not any("oo2core_" in name for name in names)
+    assert not any(name.endswith(".pdb") for name in names)
