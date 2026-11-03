@@ -50,9 +50,3 @@ def test_installers_handle_the_same_shop_categories():
     for category in SHOP_CATEGORIES:
         assert f"shop_{category}" in bat
         assert f"shop_{category}" in sh
-
-
-def test_installers_handle_map_reveal():
-    bat, sh = _read(BAT), _read(SH)
-    assert "--reveal" in bat
-    assert "--reveal" in sh

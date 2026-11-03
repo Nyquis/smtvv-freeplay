@@ -89,7 +89,7 @@ import stockpile
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.10.1"
+MOD_VERSION = "5.10.2"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -480,7 +480,7 @@ def main() -> None:
         "--reveal",
         choices=reveal.MODES,
         default="none",
-        help="Map reveal: none, treasures, leylines or both",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--check",

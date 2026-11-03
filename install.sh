@@ -142,14 +142,12 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
     declare -A SEL_SHOP=()
     INST_ITEMS=""
     INST_AUTOSAVE=""
-    INST_REVEAL=""
     if [ -f "$STATE" ]; then
         while IFS='=' read -r k v; do
             k="${k%$'\r'}"; v="${v%$'\r'}"
             case "$k" in
                 itemhacks) case "$v" in refill|stockpile) INST_ITEMS="$v" ;; esac ;;
                 autosave) [[ "$v" =~ ^([1-9]|1[0-9]|20)$ ]] && INST_AUTOSAVE="$v" ;;
-                reveal) case "$v" in none|treasures|leylines|both) INST_REVEAL="$v" ;; esac ;;
                 shop) [ "$v" = "1" ] && INST_SHOP[growth]=immediate ;;
                 shop_consumables|shop_growth|shop_essences|shop_misc)
                     scat="${k#shop_}"
@@ -168,10 +166,7 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
         fi
     done
     [ -n "$SHOP_INSTALLED" ] && NINST=$((NINST + 1))
-    if [ -n "$INST_REVEAL" ] && [ "$INST_REVEAL" != "none" ]; then
-        NINST=$((NINST + 1))
-    fi
-    NALL=14
+    NALL=13
 
     # An install that predates the feature record.
     LEGACY=""
@@ -304,31 +299,13 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
         done
     }
 
-    ask_reveal() {
-        local cur A
-        cur="${INST_REVEAL:-none}"
-        while true; do
-            read -r -p "  Map Reveal (treasure / leyline icons) [t]reasures [l]eylines [b]oth [N]one [current: $cur]: " A
-            if [ -z "$A" ]; then A="$cur"; fi
-            case "$A" in
-                t|T|treasures) SEL_REVEAL=treasures; return ;;
-                l|L|leylines) SEL_REVEAL=leylines; return ;;
-                b|B|both) SEL_REVEAL=both; return ;;
-                n|N|none) SEL_REVEAL=none; return ;;
-                *) echo "  Please enter t, l, b or n." ;;
-            esac
-        done
-    }
-
     SEL_ITEMS=none
     SEL_AUTOSAVE=""
-    SEL_REVEAL="none"
     for k in essences heal mimans miracles compendium; do ask "$k"; done
     ask_items
     ask_warned jump
     ask_shop
     for k in magatsuhi estoma; do ask "$k"; done
-    ask_reveal
     ask_warned intro
     for k in masakado newborn; do ask "$k"; done
     ask_autosave
@@ -341,8 +318,6 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
         PATCH_FLAGS+=("--shop-$cat" "${SEL_SHOP[$cat]}")
         if [ "${SEL_SHOP[$cat]}" != "default" ]; then NSEL=$((NSEL + 1)); fi
     done
-    PATCH_FLAGS+=("--reveal" "$SEL_REVEAL")
-    if [ "$SEL_REVEAL" != "none" ]; then NSEL=$((NSEL + 1)); fi
     case "$SEL_ITEMS" in
         refill) NSEL=$((NSEL + 1)) ;;
         stockpile) NSEL=$((NSEL + 1)); PATCH_FLAGS+=("--stockpile") ;;
