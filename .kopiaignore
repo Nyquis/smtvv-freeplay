@@ -1,0 +1,41 @@
+# Kopia ignore rules for this repository.
+# Keep this file in sync with .gitignore — same sections, same patterns.
+# Syntax is gitignore-style: comments start with '#', 'dir/' matches folders.
+#
+# NOTE: .git/ is intentionally NOT ignored, so unpushed commits, branches and
+# stashes remain recoverable from a Kopia snapshot. Change that only on purpose.
+
+# Python bytecode cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Local environments / tooling caches
+.pixi/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Patcher output / backups (created in the game folder, never here)
+*.patched
+*.original
+*.pak
+
+# Build output
+dist/
+build/
+
+# Flight module build artifacts (prebuilt flight/xinput1_3.dll IS committed)
+flight/*.obj
+flight/*.exp
+flight/*.lib
+
+# Oodle runtime copied from the game by repak at install time
+repak/win64/oo2core_*.dll
+
+# OS / editor junk
+Thumbs.db
+desktop.ini
+.DS_Store

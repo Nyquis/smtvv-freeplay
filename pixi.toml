@@ -1,0 +1,14 @@
+[workspace]
+name = "smtvv-freeplay"
+channels = ["conda-forge"]
+platforms = ["win-64", "linux-64"]
+
+[dependencies]
+python = "3.12.*"
+ruff = ">=0.6"
+
+[tasks]
+patch = { cmd = "python patch_smtvv_freeplay.py", description = "Run the patcher (append its flags directly)" }
+lint = { cmd = "ruff check", description = "Lint Python sources (append files to narrow)" }
+fmt = { cmd = "ruff format", description = "Format Python sources (rewrites files)" }
+fmt-check = { cmd = "ruff format --check", description = "Check formatting without writing" }

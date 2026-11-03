@@ -1,6 +1,15 @@
 # Python bytecode cache
 __pycache__/
 *.pyc
+*.pyo
+
+# Local environments / tooling caches
+.pixi/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # Patcher output / backups (created in the game folder, never here)
 *.patched
@@ -18,3 +27,8 @@ flight/*.lib
 
 # Oodle runtime copied from the game by repak at install time
 repak/win64/oo2core_*.dll
+
+# OS / editor junk
+Thumbs.db
+desktop.ini
+.DS_Store

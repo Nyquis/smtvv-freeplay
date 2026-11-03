@@ -329,6 +329,13 @@ at install time.
 - Safe to use with existing saves. The installer modifies the executable and
   optional pak files, not save data.
 
+## Development
+
+Working on the patcher or installers uses [pixi](https://pixi.sh) for the
+development environment and tasks. See [DEVELOPMENT.md](DEVELOPMENT.md) for
+setup, `pixi run` tasks, and testing notes. The bundled `python/` runtime
+stays the one end users run.
+
 ## License
 
 This project is licensed under the **MIT License** — see [LICENSE](LICENSE).
