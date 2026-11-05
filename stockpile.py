@@ -24,7 +24,8 @@ from __future__ import annotations
 import os
 import struct
 
-from gameplay_patches import (Asm, BTL_NEXTSTEP_OFF, BTL_STEP_END_EVENT, BTL_STEP_PRE, ITEM_GET_MAX, ITEM_GET_NUM,
+from gameplay_patches import (Asm, BTL_NEXTSTEP_OFF, BTL_STEP_END_EVENT, BTL_STEP_PRE, ITEM_GET_MAX,
+                              ITEM_GET_MAX_ORIG, ITEM_GET_NUM, ITEM_GET_NUM_ORIG, SETNEXTSTEP_ORIG,
                               SETNEXTSTEP_THUNKS, _jmp_site, _place, va, off)
 from shop_pak import ITEM_ID_OFF, ITEM_ROW, ITEM_TABLE, _section
 
@@ -46,6 +47,7 @@ ITEM_MENU_ROWS = (0x147A95A40, 0x147A95C00)
 # Blueprint exec thunk of ItemGetMaxNum (a 5-byte jump into the protected
 # body), hooked in place.
 MAX_THUNKS = [0x140CCBA60]
+MAX_THUNK_ORIG = bytes.fromhex("e90bd42d0a")
 # The other registered copy (0x140CCA910) must keep its code bytes (patching
 # them makes the game exit during startup), so its entry in the native
 # function table is pointed at the hook instead: (table slot, thunk).
@@ -126,8 +128,17 @@ def _patch_stockpile(data: bytearray, cave_off: int, cave_end: int,
     """Main code goes in the shared cave; the ItemGetMaxNum hooks go in the
     smaller caves listed in side ([start, end] or [start, end, va - file],
     used up in place)."""
-    for t in SETNEXTSTEP_THUNKS + MAX_THUNKS + [ITEM_GET_NUM, ITEM_GET_MAX]:
-        if data[off(t)] != 0xE9:
+    for t in SETNEXTSTEP_THUNKS:
+        if data[off(t) : off(t) + 5] != SETNEXTSTEP_ORIG:
+            return None
+    for t in MAX_THUNKS:
+        if data[off(t) : off(t) + 5] != MAX_THUNK_ORIG:
+            return None
+    for fn, expected in (
+        (ITEM_GET_NUM, ITEM_GET_NUM_ORIG),
+        (ITEM_GET_MAX, ITEM_GET_MAX_ORIG),
+    ):
+        if data[off(fn) : off(fn) + 5] != expected:
             return None
     for slot, thunk in MAX_SLOTS:
         if struct.unpack_from("<Q", data, _file_off(data, slot))[0] != thunk:

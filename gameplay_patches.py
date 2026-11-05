@@ -205,6 +205,7 @@ def put_code(data: bytearray, caves: list[list[int]], build) -> int:
 # this thunk (0x140C27BC0) must stay untouched: redirecting it makes the
 # game exit during startup.
 SETNEXTSTEP_THUNKS = [0x140C2C2D0]
+SETNEXTSTEP_ORIG = bytes.fromhex("e93b9ec307")
 BTL_NEXTSTEP_OFF = 0x262  # m_NextStep
 BTL_STEP_PRE = 3
 BTL_STEP_READY = 2  # E_BTL_STEP_READY .. E_BTL_STEP_START_EVENT run once per
@@ -216,19 +217,28 @@ ITEM_GET_MAX = 0x140ACF220  # ItemGetMaxNum(id) -> int
 ITEM_GET_NUM = 0x140ACF4F0  # ItemGetNum(id) -> int
 ITEM_IS_GOTTEN = 0x140ACF6F0  # ItemIsGotten(id) -> bool
 ITEM_IS_USEBATTLE = 0x140ACF7C0  # ItemIsUseBattle(id) -> bool
+ITEM_GET_ORIG = bytes.fromhex("e9bb7d8c06")
+ITEM_GET_MAX_ORIG = bytes.fromhex("e93b7c8d06")
+ITEM_GET_NUM_ORIG = bytes.fromhex("e9cbba8d06")
+ITEM_IS_GOTTEN_ORIG = bytes.fromhex("e9fbb98e06")
 REFILL_ID_MAX = 135  # use items are 1..135
 
 
 def patch_refill(data: bytearray, cave_off: int, cave_end: int) -> int | None:
     for t in SETNEXTSTEP_THUNKS:
-        if data[off(t)] != 0xE9:
+        if data[off(t) : off(t) + 5] != SETNEXTSTEP_ORIG:
             return None
     if data[off(ITEM_IS_USEBATTLE) : off(ITEM_IS_USEBATTLE) + 5] != bytes.fromhex(
         "48895c2408"
     ):
         return None
-    for fn in (ITEM_GET, ITEM_GET_MAX, ITEM_GET_NUM, ITEM_IS_GOTTEN):
-        if data[off(fn)] != 0xE9:
+    for fn, expected in (
+        (ITEM_GET, ITEM_GET_ORIG),
+        (ITEM_GET_MAX, ITEM_GET_MAX_ORIG),
+        (ITEM_GET_NUM, ITEM_GET_NUM_ORIG),
+        (ITEM_IS_GOTTEN, ITEM_IS_GOTTEN_ORIG),
+    ):
+        if data[off(fn) : off(fn) + 5] != expected:
             return None
 
     for t in SETNEXTSTEP_THUNKS:
@@ -279,7 +289,9 @@ UPLIFT_MAX = 100
 
 def patch_magatsuhi(data: bytearray, caves: list[list[int]]) -> bool:
     for t in SETNEXTSTEP_THUNKS:
-        if data[off(t)] != 0xE9:
+        current = data[off(t) : off(t) + 5]
+        # Refill or Stockpile may already have redirected this thunk.
+        if current != SETNEXTSTEP_ORIG and current[0] != 0xE9:
             return False
 
     def u32(v):
