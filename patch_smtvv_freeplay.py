@@ -71,6 +71,7 @@ from __future__ import annotations
 
 import argparse
 import bisect
+import hashlib
 import os
 import platform
 import re
@@ -95,7 +96,7 @@ import stockpile
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.11.2"
+MOD_VERSION = "5.11.3"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -637,6 +638,67 @@ def check_tables(game_dir: str, repak: str | None) -> None:
         print(f"  [{'ok' if count else 'missing'}] MinimapIcon tables: {count}")
 
 
+def _sha256_file(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _patched_markers() -> tuple[tuple[int, bytes], ...]:
+    """Sites whose bytes prove the executable has already been patched."""
+    return (
+        (MIMAN_POS_CHECK_OFFSET, b"\xb0\x01\xc3"),
+        (DEVIL_COST_OFFSET, b"\x33\xc0\xc3"),
+        (gameplay_patches.off(leylines.POI_VISIBLE_SITE), b"\xe9"),
+    )
+
+
+def _has_patched_markers(path: str) -> bool:
+    with open(path, "rb") as fh:
+        for offset, marker in _patched_markers():
+            fh.seek(offset)
+            if fh.read(len(marker)) == marker:
+                return True
+    return False
+
+
+def _choose_source(
+    live_hash: str,
+    original_hash: str | None,
+    patched_hash: str | None,
+    patched_markers: bool,
+) -> tuple[str, bool]:
+    """Return ("live" | "original", refresh_backup).
+
+    "live" means the live executable is a new unpatched build and must become
+    the new .original backup. "original" means the existing backup is safe.
+    """
+    if patched_hash is not None and live_hash == patched_hash:
+        if original_hash is None:
+            raise RuntimeError(
+                "the live executable is the patched build but the .original "
+                "backup is missing; verify the game files or restore it"
+            )
+        return "original", False
+    if original_hash is None:
+        if patched_markers:
+            raise RuntimeError(
+                "the live executable looks patched but the .original backup is "
+                "missing; verify the game files or restore it"
+            )
+        return "live", True
+    if live_hash == original_hash:
+        return "original", False
+    if patched_markers:
+        raise RuntimeError(
+            "the live executable differs from both backups and still contains "
+            "patched markers; refusing to patch a partial install"
+        )
+    return "live", True
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="SMT5V: Vengeance - Freeplay Patcher")
     parser.add_argument(
@@ -799,8 +861,37 @@ def main() -> None:
         )
         print("        needed by this mod and can be deleted to free space.")
 
-    # Always patch from the original backup if one exists
-    source = bak_path if os.path.isfile(bak_path) else exe_path
+    if not os.path.isfile(exe_path):
+        print(f"\n  ERROR: executable not found: {exe_path}")
+        sys.exit(1)
+
+    live_hash = _sha256_file(exe_path)
+    original_hash = _sha256_file(bak_path) if os.path.isfile(bak_path) else None
+    patched_hash = _sha256_file(out_path) if os.path.isfile(out_path) else None
+    patched_markers = _has_patched_markers(exe_path)
+
+    def _short(value: str | None) -> str:
+        return value[:12] if value else "missing"
+
+    print("  Source check :")
+    print(f"    live        {_short(live_hash)}")
+    print(f"    original    {_short(original_hash)}")
+    print(f"    patched     {_short(patched_hash)}")
+    try:
+        source_kind, refresh_backup = _choose_source(
+            live_hash, original_hash, patched_hash, patched_markers
+        )
+    except RuntimeError as exc:
+        print(f"\n  ERROR: {exc}")
+        sys.exit(1)
+
+    source = exe_path if source_kind == "live" else bak_path
+    if source_kind == "live":
+        print("  Using live executable; the .original backup will be refreshed.")
+        if check:
+            print("  Check only: a real run would replace .original with this build.")
+    else:
+        print("  Using original backup.")
     print(f"  Reading {os.path.basename(source)} ...")
     with open(source, "rb") as fh:
         data = bytearray(fh.read())
@@ -1398,7 +1489,10 @@ def main() -> None:
     # ------------------------------------------------------------------
     # Backup & save
     # ------------------------------------------------------------------
-    if not os.path.isfile(bak_path):
+    if refresh_backup:
+        print(f"\n  Refreshing original backup -> {os.path.basename(bak_path)}")
+        shutil.copy2(exe_path, bak_path)
+    elif not os.path.isfile(bak_path):
         print(f"\n  Backing up original -> {os.path.basename(bak_path)}")
         shutil.copy2(exe_path, bak_path)
 
@@ -1431,6 +1525,7 @@ def main() -> None:
     for category, mode in shop_modes.items():
         lines.append(f"shop_{category}={mode}")
     lines.append(f"reveal={args.reveal}")
+    lines.append(f"game_hash={live_hash}")
     with open(
         os.path.join(os.path.dirname(out_path), FEATURES_FILE + ".new"),
         "w",
