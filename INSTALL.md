@@ -70,7 +70,7 @@ Only the installer differs.
 
 ## Uninstall
 
-- **Windows:** run `install.bat` and answer **Y** to uninstall all, or run
+- **Windows:** run `install.bat` and choose **u** on the first screen, or run
   `uninstall.bat`.
 - **Steam Deck / Linux:** run `./uninstall.sh`.
 

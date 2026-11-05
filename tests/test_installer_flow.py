@@ -91,3 +91,66 @@ def test_split_args_uninstall():
     assert game == "C:\\game"
     assert flags == ["--uninstall"]
     assert scripted is True
+
+
+def _fake_game(tmp_path):
+    root = tmp_path / "SMT5V"
+    binary = root.joinpath(*state.BIN_PARTS)
+    binary.mkdir(parents=True)
+    (binary / state.EXE).write_bytes(b"MZ")
+    return root
+
+
+def _drive_wizard(
+    monkeypatch, tmp_path, select_heal: bool, pick_magatsuhi: bool = True
+):
+    console = _console(monkeypatch)
+    monkeypatch.setattr(entry.ui, "Console", lambda: console)
+    monkeypatch.setattr(sys, "stdout", io.StringIO())
+    root = _fake_game(tmp_path)
+    monkeypatch.setattr(entry.platform, "find_game", lambda *_args: root)
+    if select_heal:
+        monkeypatch.setattr(
+            entry.ui,
+            "checklist",
+            lambda _c, _s, _t, _sub, _mods, checks: checks.update({"heal": True}),
+        )
+    else:
+        monkeypatch.setattr(entry.ui, "checklist", lambda *_args: None)
+    monkeypatch.setattr(
+        entry.ui,
+        "radio",
+        lambda _c, _s, title, _sub, options, index: (
+            1 if pick_magatsuhi and title == "Full Magatsuhi" else index
+        ),
+    )
+    monkeypatch.setattr(entry.ui, "ask_text", lambda *_args, **_kwargs: "")
+    monkeypatch.setattr(entry.ui, "notice", lambda *_args: True)
+    monkeypatch.setattr(entry.ui, "wait_for_enter", lambda *_args: None)
+    monkeypatch.setattr(entry, "review", lambda *_args: None)
+    monkeypatch.setattr(entry, "finish_install", lambda *_args, **_kwargs: None)
+    captured = {}
+
+    def fake_steps(game, flags, console):
+        captured["flags"] = flags
+        return True
+
+    monkeypatch.setattr(entry, "run_patcher_steps", fake_steps)
+    return entry.main(["--game-dir", str(root)]), captured
+
+
+def test_interactive_wizard_builds_the_selected_flags(monkeypatch, tmp_path):
+    code, captured = _drive_wizard(monkeypatch, tmp_path, select_heal=True)
+    assert code == 0
+    flags = captured["flags"]
+    assert "--magatsuhi-chain" in flags
+    assert "--no-heal" not in flags
+    assert "--no-refill" in flags
+
+
+def test_interactive_wizard_refuses_an_empty_selection(monkeypatch, tmp_path):
+    code, captured = _drive_wizard(
+        monkeypatch, tmp_path, select_heal=False, pick_magatsuhi=False
+    )
+    assert code == 0
+    assert captured == {}

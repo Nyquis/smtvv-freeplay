@@ -141,12 +141,11 @@ chmod +x install.sh
 ./install.sh
 ```
 
-It asks about each mod in turn, the same questions as `install.bat` except
-DualSense Haptics, which needs Windows: Y to
-install a mod, Enter to skip it, and a save slot (1-20) for Autosave After
-Battle. Run it again later to add or remove mods; it shows which ones are
-installed and offers to uninstall all of them. If it can't find the game
-automatically, it asks you to paste your SMT5V folder path.
+The interface is the same as on Windows (arrow keys, Space, Enter), minus
+DualSense Haptics, which needs Windows. Run it again later to add or remove
+mods; installed mods are pre-selected and the first screen offers to uninstall
+everything. If it can't find the game automatically, it asks you to paste your
+SMT5V folder path.
 
 Uninstall with `./uninstall.sh`. (`python3`, used by the patcher, ships with
 Desktop Mode.)
@@ -196,8 +195,8 @@ New work should use `patch_smtvv_freeplay.py`.
 ## Uninstall
 
 Run `uninstall.bat` (Windows) or `./uninstall.sh` (Linux), or run `install.bat`
-and answer Y to uninstall all. This restores the original executable and removes the
-mod's data paks and, if installed, DualSense Haptics.
+and choose **u** on the first screen. This restores the original executable and
+removes the mod's data paks and, if installed, DualSense Haptics.
 
 You can also restore the executable through Steam:
 
