@@ -45,8 +45,25 @@ so passing `--` here would reach the program literally.
 
 `--game-dir` must point at a **disposable copy** of the game folder. The
 patcher backs up and rewrites `SMT5V-Win64-Shipping.exe` and leaves
-`.original` / `.patched` files behind. Never run the patcher, `install.bat` or
-`install.sh` against a real installation while developing.
+`.original` / `.patched` files behind. Never run the patcher, `installer.py`,
+`install.bat` or `install.sh` against a real installation while developing;
+point them at a copy instead.
+
+## Installer
+
+`install.bat` and `install.sh` are thin launchers: they pick the interpreter
+and run `installer.py`. All interactive logic lives in Python, stdlib only:
+
+| File | Role |
+| --- | --- |
+| `installer.py` | Entry point, argument handling, install flow |
+| `installer_ui.py` | Terminal layer: colours, key handling, checklist/radio screens |
+| `installer_state.py` | Mod catalogue, `Freeplay.features` parsing, patcher flags |
+| `installer_platform.py` | Game discovery, haptics, exe/pak file operations |
+
+Keep the two launchers trivial; do not add questions or platform logic to
+`install.bat` / `install.sh`. The default interactive flow writes only after
+the review screen and the `--check` preflight pass.
 
 ## Two Pythons
 

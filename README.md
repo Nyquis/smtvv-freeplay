@@ -2,7 +2,7 @@
 
 Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
 
-**Current version: 5.12.1**
+**Current version: 5.13.0**
 
 ## Features
 
@@ -107,16 +107,14 @@ See **[INSTALL.md](INSTALL.md)** for the full step-by-step. Quick version below.
 
 2. Double-click `install.bat`.
 
-3. Answer one question per mod (Reusable Essences, Leyline Auto-Heal, Miman
-   Reveal, Leyline Founts, NG+ Miracles, Free Compendium, Item Hacks (Battle
-   Refill or Stockpile), Superjump, Shop Stock (one question per category), Full
-   Magatsuhi, Free Estoma, Skip Intro, Masakado Unlock, Newborn
-   Clears Compendium, Autosave After Battle, DualSense Haptics). Press Enter to
-   skip a mod.
+3. Use the installer: arrow keys move, Space toggles a mod, Enter continues.
+   Then pick Item Hacks (Battle Refill or Stockpile), the Full Magatsuhi mode
+   (every battle, once per chain, or game default), an optional autosave slot,
+   and a shop mode per category. A review screen shows the selection before
+   anything is written.
 
-   Run `install.bat` again later to add or remove mods: it shows which ones
-   are installed, offers to uninstall all of them first, and otherwise asks
-   about each mod again (Enter keeps an installed mod).
+   Run `install.bat` again later to add or remove mods: installed mods are
+   pre-selected, and the first screen offers to uninstall everything.
 
 The installer backs up the original executable as:
 

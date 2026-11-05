@@ -24,13 +24,15 @@ again.
 1. Download and **extract** the zip (don't run it from inside the archive).
 2. Close the game.
 3. Double-click **`install.bat`**.
-4. Answer one question per mod: **Y** to install it, Enter to skip it. For
-   Autosave After Battle, type the save slot (1-20) it should use. Shop Stock
-   asks one question per category (consumables, growth items, essences, misc):
-   **d** game default, **f** free with the game's unlock timing, **i** free and
-   available immediately.
-   Run `install.bat` again later to add or remove mods; it shows which ones are
-   installed and offers to uninstall all of them.
+4. Use the installer: arrow keys move, Space toggles a mod, Enter continues.
+   Then choose Item Hacks (Battle Refill, Stockpile or neither), the Full
+   Magatsuhi mode (every battle, once per chain or game default), an optional
+   autosave slot (1-20), and a shop mode per category (consumables, growth,
+   essences, misc): game default, free with the game's unlock timing, or free
+   and available immediately. A review screen shows the selection before
+   anything is written.
+   Run `install.bat` again later to add or remove mods; installed mods are
+   pre-selected and the first screen offers to uninstall everything.
 5. If it can't find the game automatically, paste your SMT5V folder path when
    asked (Steam → right-click SMT5V:V → Manage → Browse local files → copy the
    path from the address bar).
@@ -54,12 +56,10 @@ Only the installer differs.
    ./install.sh
    ```
 
-   It asks about each mod in turn: **Y** to install it, Enter to skip it. For
-   Autosave After Battle, type the save slot (1-20) it should use. Shop Stock
-   asks one question per category (consumables, growth items, essences, misc):
-   **d** game default, **f** free with the game's unlock timing, **i** free and
-   available immediately. Run it again later to add or remove mods; it shows
-   which ones are installed and offers to uninstall all of them.
+   The interface is the same as on Windows: arrow keys move, Space toggles a
+   mod, Enter continues, then the Item Hacks, Magatsuhi, autosave and shop
+   screens follow. Run it again later to add or remove mods; installed mods are
+   pre-selected and the first screen offers to uninstall everything.
 
    If the script can't find the game automatically, it will ask you to paste your
    SMT5V folder path.

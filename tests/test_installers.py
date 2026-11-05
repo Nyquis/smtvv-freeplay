@@ -1,81 +1,47 @@
-"""Guard against drift between the Windows and Linux installers."""
+"""Guard the thin launchers and the installer's flag contract."""
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
+
+import installer_state as state
 
 ROOT = Path(__file__).resolve().parents[1]
 BAT = ROOT / "install.bat"
 SH = ROOT / "install.sh"
 
-SHOP_CATEGORIES = ("consumables", "growth", "essences", "misc")
+
+def test_launchers_hand_over_to_python():
+    for path in (BAT, SH):
+        assert "installer.py" in path.read_text(encoding="utf-8")
 
 
-def _read(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
+def test_launchers_keep_no_questions():
+    bat = BAT.read_text(encoding="utf-8").lower()
+    sh = SH.read_text(encoding="utf-8").lower()
+    assert "set /p" not in bat
+    assert "read -r -p" not in sh
 
 
-def _bat_keys() -> set[str]:
-    match = re.search(r'set "BOOL_KEYS=([^"]+)"', _read(BAT))
-    assert match, "BOOL_KEYS not found in install.bat"
-    return set(match.group(1).split())
+def test_launchers_pass_arguments_through():
+    assert "%*" in BAT.read_text(encoding="utf-8")
+    assert '"$@"' in SH.read_text(encoding="utf-8")
 
 
-def _sh_keys() -> set[str]:
-    match = re.search(r"BOOL_KEYS=\(([^)]+)\)", _read(SH))
-    assert match, "BOOL_KEYS not found in install.sh"
-    return set(match.group(1).split())
+def test_every_catalogue_flag_exists_in_the_patcher():
+    text = (ROOT / "patch_smtvv_freeplay.py").read_text(encoding="utf-8")
+    for mod in state.PATCH_MODS:
+        for flag in (mod.on_flag, mod.off_flag):
+            if flag:
+                assert f'"{flag}"' in text, flag
 
 
-def test_installers_expose_the_same_features():
-    assert _bat_keys() == _sh_keys()
-
-
-def test_every_batch_feature_has_a_prompt():
-    text = _read(BAT)
-    for key in _bat_keys():
-        assert re.search(
-            rf"call :ask(?:_warned)? {re.escape(key)}\b|call :ask_{re.escape(key)}\b",
-            text,
-        ), key
-
-
-def test_every_linux_feature_is_asked():
-    text = _read(SH)
-    for key in _sh_keys():
-        assert re.search(rf"\b{re.escape(key)}\b", text)
-    assert 'ask "$k"' in text
-
-
-def test_installers_verify_before_applying():
-    bat, sh = _read(BAT), _read(SH)
-    for text in (bat, sh):
-        assert "Step 1 of 2 - Preflight check" in text
-        assert "Step 2 of 2 - Applying patches" in text
-        assert "Patch verification failed" in text
-        assert "--check" in text
-
-
-def test_installers_offer_the_magatsuhi_modes():
-    bat, sh = _read(BAT), _read(SH)
-    for text in (bat, sh):
-        assert "--magatsuhi-chain" in text
-        assert "magatsuhi_chain" in text
-        assert "every battle" in text
-        assert "once per chain" in text
-        assert "game default" in text
-
-
-def test_installers_offer_leylines():
-    bat, sh = _read(BAT), _read(SH)
-    for text in (bat, sh):
-        assert "leylines" in text
-        assert "--leylines" in text
-
-
-def test_installers_handle_the_same_shop_categories():
-    bat, sh = _read(BAT), _read(SH)
-    for category in SHOP_CATEGORIES:
-        assert f"shop_{category}" in bat
-        assert f"shop_{category}" in sh
+def test_package_ships_the_installer_modules():
+    text = (ROOT / "package.py").read_text(encoding="utf-8")
+    for name in (
+        "installer.py",
+        "installer_ui.py",
+        "installer_state.py",
+        "installer_platform.py",
+    ):
+        assert f'"{name}"' in text
