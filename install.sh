@@ -128,6 +128,7 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
         [essences]="Reusable Essences (essences not consumed)"
         [heal]="Leyline Auto-Heal (full HP/MP on leyline use)"
         [mimans]="Miman Reveal (all miman positions shown on map)"
+        [leylines]="Leyline Founts on Map (visible through fog on the main map)"
         [miracles]="NG+ Miracles (unlock NG+ miracles early)"
         [compendium]="Free Compendium (compendium summons cost nothing)"
         [jump]="Superjump (hold jump to rise, faster air control)"
@@ -148,6 +149,7 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
             case "$k" in
                 itemhacks) case "$v" in refill|stockpile) INST_ITEMS="$v" ;; esac ;;
                 autosave) [[ "$v" =~ ^([1-9]|1[0-9]|20)$ ]] && INST_AUTOSAVE="$v" ;;
+                leylines) [ "$v" = "1" ] && INST[leylines]=1 ;;
                 shop) [ "$v" = "1" ] && INST_SHOP[growth]=immediate ;;
                 shop_consumables|shop_growth|shop_essences|shop_misc)
                     scat="${k#shop_}"
@@ -166,7 +168,7 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
         fi
     done
     [ -n "$SHOP_INSTALLED" ] && NINST=$((NINST + 1))
-    NALL=13
+    NALL=15
 
     # An install that predates the feature record.
     LEGACY=""
@@ -301,7 +303,7 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
 
     SEL_ITEMS=none
     SEL_AUTOSAVE=""
-    for k in essences heal mimans miracles compendium; do ask "$k"; done
+    for k in essences heal mimans leylines miracles compendium; do ask "$k"; done
     ask_items
     ask_warned jump
     ask_shop
@@ -314,6 +316,9 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
     for k in "${BOOL_KEYS[@]}"; do
         if [ -n "${SEL[$k]:-}" ]; then NSEL=$((NSEL + 1)); else PATCH_FLAGS+=("--no-$k"); fi
     done
+    if [ -n "${SEL[leylines]:-}" ]; then
+        NSEL=$((NSEL + 1)); PATCH_FLAGS+=("--leylines")
+    fi
     for cat in consumables growth essences misc; do
         PATCH_FLAGS+=("--shop-$cat" "${SEL_SHOP[$cat]}")
         if [ "${SEL_SHOP[$cat]}" != "default" ]; then NSEL=$((NSEL + 1)); fi

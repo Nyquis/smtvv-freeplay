@@ -36,6 +36,7 @@ INCLUDE_FILES = (
     "shop_pak.py",
     "stockpile.py",
     "estoma.py",
+    "leylines.py",
     "reveal.py",
     "README.md",
     "INSTALL.md",

@@ -13,6 +13,9 @@ Applies quality-of-life patches to the game executable and optional data paks:
 
   3. Miman Reveal  -- every Miman position is shown on the map.
 
+  3b. Leyline Founts -- leyline fount icons are drawn through fog on the
+      main map; the minimap keeps its normal local range.
+
   4. NG+ Miracles  -- selected NG+ miracles are visible and purchasable
      before clearing the game.
 
@@ -79,6 +82,7 @@ import autosave
 import boot_pak
 import estoma
 import gameplay_patches
+import leylines
 import newborn
 import quest_pak
 import reveal
@@ -89,7 +93,7 @@ import stockpile
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.10.2"
+MOD_VERSION = "5.11.0"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -477,6 +481,11 @@ def main() -> None:
         "--no-estoma", action="store_true", help="Skip the Free Estoma patch"
     )
     parser.add_argument(
+        "--leylines",
+        action="store_true",
+        help="Show leyline founts through fog on the main map",
+    )
+    parser.add_argument(
         "--reveal",
         choices=reveal.MODES,
         default="none",
@@ -516,7 +525,10 @@ def main() -> None:
     do_shop = shop_pak.has_changes(shop_modes)
     do_newborn = not args.no_newborn
     do_estoma = not args.no_estoma
-    do_reveal = args.reveal != "none"
+    do_leylines = args.leylines
+    do_reveal = args.reveal != "none" and not do_leylines
+    if args.leylines and args.reveal != "none":
+        print("  NOTE: --leylines replaces the legacy --reveal pak; ignoring --reveal")
     autosave_slot = args.autosave_slot
 
     game_dir = locate_game_dir(args.game_dir)
@@ -594,6 +606,7 @@ def main() -> None:
             ("Essences", do_essences),
             ("Heal", do_heal),
             ("Mimans", do_mimans),
+            ("Leylines", do_leylines),
             ("Reveal", do_reveal),
             ("Miracles", do_miracles),
             ("Compendium", do_compendium),
@@ -724,6 +737,25 @@ def main() -> None:
             patch_num += 1
             print(f"\n  [{patch_num}/{total}] Miman Reveal")
             print(f"    Position check: 0x{MIMAN_POS_CHECK_OFFSET:08X}  -> true")
+
+    # ==================================================================
+    # PATCH: Leyline Founts on the Main Map
+    # ==================================================================
+    if do_leylines:
+        start = next_cave_off
+        try:
+            result = leylines.patch_leylines(data, next_cave_off, cave_off + cave_len)
+        except RuntimeError as exc:
+            print(f"\n  WARNING: Leyline Founts skipped - {exc}")
+            result = None
+        if result is None:
+            print("\n  WARNING: Leyline icon AOB mismatch - skipping")
+        else:
+            next_cave_off = result
+            patch_num += 1
+            print(f"\n  [{patch_num}/{total}] Leyline Founts")
+            print(f"    Code cave     : 0x{start:08X}  ({next_cave_off - start} bytes)")
+            print("    Fog bypass    : E_MINIMAP_POI_TYPE_RYUKETSU")
 
     # ==================================================================
     # PATCH: NG+ Miracles Unlock
@@ -1126,6 +1158,7 @@ def main() -> None:
         "essences": do_essences,
         "heal": do_heal,
         "mimans": do_mimans,
+        "leylines": do_leylines,
         "miracles": do_miracles,
         "compendium": do_compendium,
         "jump": do_jump,

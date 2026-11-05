@@ -41,6 +41,7 @@ for %%K in (%BOOL_KEYS%) do set "INST_%%K="
 set "INST_itemhacks="
 set "INST_autosave="
 set "INST_haptics="
+set "INST_leylines="
 set "INST_shop_consumables="
 set "INST_shop_growth="
 set "INST_shop_essences="
@@ -52,6 +53,7 @@ if exist "!STATE!" (
         if /i "%%A"=="itemhacks" if /i "%%B"=="stockpile" set "INST_itemhacks=stockpile"
         if /i "%%A"=="autosave" for /l %%N in (1,1,20) do if "%%B"=="%%N" set "INST_autosave=%%N"
         if /i "%%A"=="haptics" if "%%B"=="1" set "INST_haptics=1"
+        if /i "%%A"=="leylines" if "%%B"=="1" set "INST_leylines=1"
         if /i "%%A"=="shop_consumables" set "INST_shop_consumables=%%B"
         if /i "%%A"=="shop_growth" set "INST_shop_growth=%%B"
         if /i "%%A"=="shop_essences" set "INST_shop_essences=%%B"
@@ -64,12 +66,13 @@ for %%K in (%BOOL_KEYS%) do if defined INST_%%K set /a NINST+=1
 if defined INST_itemhacks set /a NINST+=1
 if defined INST_autosave set /a NINST+=1
 if defined INST_haptics set /a NINST+=1
+if defined INST_leylines set /a NINST+=1
 set "SHOP_INSTALLED="
 for %%C in (consumables growth essences misc) do (
     if defined INST_shop_%%C if /i not "!INST_shop_%%C!"=="default" set "SHOP_INSTALLED=1"
 )
 if defined SHOP_INSTALLED set /a NINST+=1
-set /a NALL=14
+set /a NALL=16
 
 :: An install that predates the feature record: the executable differs from
 :: the backup, or a Freeplay data pak is present.
@@ -125,6 +128,7 @@ echo.
 call :ask essences "Reusable Essences (essences not consumed)"
 call :ask heal "Leyline Auto-Heal (full HP/MP on leyline use)"
 call :ask mimans "Miman Reveal (all miman positions shown on map)"
+call :ask leylines "Leyline Founts on Map (visible through fog on the main map)"
 call :ask miracles "NG+ Miracles (unlock NG+ miracles early)"
 call :ask compendium "Free Compendium (compendium summons cost nothing)"
 call :ask_items
@@ -146,6 +150,10 @@ for %%K in (%BOOL_KEYS%) do (
     ) else (
         set "FLAGS=!FLAGS! --no-%%K"
     )
+)
+if defined SEL_leylines (
+    set /a NSEL+=1
+    set "FLAGS=!FLAGS! --leylines"
 )
 for %%C in (consumables growth essences misc) do (
     set "FLAGS=!FLAGS! --shop-%%C !SEL_shop_%%C!"

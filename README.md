@@ -2,7 +2,7 @@
 
 Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
 
-**Current version: 5.10.2**
+**Current version: 5.11.0**
 
 ## Features
 
@@ -74,6 +74,11 @@ Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
     keeping it through moon phases leave the gauge untouched. Estoma Field I
     still has to be learned, and Estoma Field II becomes redundant.
 
+16. **Leyline Founts** - fount icons are drawn through unexplored fog on the
+    main map. The minimap keeps its normal local range, so a fount appears
+    there only when it is nearby. This does not unlock the founts or change
+    fast travel.
+
 ## Requirements
 
 - Shin Megami Tensei V: Vengeance — the **Steam** version, on Windows or
@@ -102,8 +107,8 @@ See **[INSTALL.md](INSTALL.md)** for the full step-by-step. Quick version below.
 2. Double-click `install.bat`.
 
 3. Answer one question per mod (Reusable Essences, Leyline Auto-Heal, Miman
-   Reveal, NG+ Miracles, Free Compendium, Item Hacks (Battle Refill or
-   Stockpile), Superjump, Shop Stock (one question per category), Full
+   Reveal, Leyline Founts, NG+ Miracles, Free Compendium, Item Hacks (Battle
+   Refill or Stockpile), Superjump, Shop Stock (one question per category), Full
    Magatsuhi, Free Estoma, Skip Intro, Masakado Unlock, Newborn
    Clears Compendium, Autosave After Battle, DualSense Haptics). Press Enter to
    skip a mod.
@@ -164,6 +169,7 @@ Optional patch flags:
 --no-essences
 --no-heal
 --no-mimans
+--leylines
 --no-miracles
 --no-compendium
 --no-refill
@@ -233,6 +239,14 @@ logic.
 The map asks `CheckMimanPositionFlag(index)` for each Miman when it builds its
 markers. The patch makes that function always return true, so every position
 shows without changing save data.
+
+### Leyline Founts
+
+The icon renderer already lets Mimans and Magatsuka icons through the fog-of-war
+test. The patch adds `E_MINIMAP_POI_TYPE_RYUKETSU` to that check. The table rows
+keep their normal `ShowFar` setting, so the minimap only shows a fount when it is
+nearby, while the full map shows founts through unexplored fog. Nothing is
+unlocked: fast travel and the founts themselves are unchanged.
 
 ### Free Compendium
 

@@ -45,6 +45,13 @@ def test_every_linux_feature_is_asked():
     assert 'ask "$k"' in text
 
 
+def test_installers_offer_leylines():
+    bat, sh = _read(BAT), _read(SH)
+    for text in (bat, sh):
+        assert "leylines" in text
+        assert "--leylines" in text
+
+
 def test_installers_handle_the_same_shop_categories():
     bat, sh = _read(BAT), _read(SH)
     for category in SHOP_CATEGORIES:
