@@ -35,7 +35,10 @@ def test_installers_expose_the_same_features():
 def test_every_batch_feature_has_a_prompt():
     text = _read(BAT)
     for key in _bat_keys():
-        assert re.search(rf"call :ask(?:_warned)? {re.escape(key)}\b", text), key
+        assert re.search(
+            rf"call :ask(?:_warned)? {re.escape(key)}\b|call :ask_{re.escape(key)}\b",
+            text,
+        ), key
 
 
 def test_every_linux_feature_is_asked():
@@ -48,7 +51,8 @@ def test_every_linux_feature_is_asked():
 def test_installers_verify_before_applying():
     bat, sh = _read(BAT), _read(SH)
     for text in (bat, sh):
-        assert "Verifying patches" in text
+        assert "Step 1 of 2 - Preflight check" in text
+        assert "Step 2 of 2 - Applying patches" in text
         assert "Patch verification failed" in text
         assert "--check" in text
 
@@ -58,6 +62,9 @@ def test_installers_offer_the_magatsuhi_modes():
     for text in (bat, sh):
         assert "--magatsuhi-chain" in text
         assert "magatsuhi_chain" in text
+        assert "every battle" in text
+        assert "once per chain" in text
+        assert "game default" in text
 
 
 def test_installers_offer_leylines():

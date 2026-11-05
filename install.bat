@@ -136,8 +136,7 @@ call :ask compendium "Free Compendium (compendium summons cost nothing)"
 call :ask_items
 call :ask_warned jump "Superjump (hold jump to rise, faster air control)"
 call :ask_shop
-call :ask magatsuhi "Full Magatsuhi (gauge full at the start of battle)"
-if defined SEL_magatsuhi call :ask_magatsuhi_mode
+call :ask_magatsuhi
 call :ask estoma "Free Estoma (barrier costs no Magatsuhi)"
 call :ask_warned intro "Skip Intro (no logos or opening movie; boot to title menu)"
 call :ask masakado "Masakado Unlock (powered-up Masakado fight without the Kiou Sword)"
@@ -215,24 +214,34 @@ if /i "!A!"=="y" (
 if /i "!A!"=="n" exit /b 0
 goto :ask_again
 
-:: call :ask_magatsuhi_mode -- battle or chain refill when Magatsuhi is chosen
-:ask_magatsuhi_mode
+:: call :ask_magatsuhi -- every battle, once per chain, or game default
+:ask_magatsuhi
+set "SEL_magatsuhi="
 set "SEL_magatsuhi_chain="
-set "Q=   Refill [b] every battle or [c] once per chain? [b]: "
-set "DEF=b"
+set "Q=   Full Magatsuhi - [b] every battle, [c] once per chain, [n] game default [n]: "
+set "DEF=n"
+if defined INST_magatsuhi (
+    set "Q=   Full Magatsuhi [installed: every battle] - [b] every battle, [c] once per chain, [n] game default [b]: "
+    set "DEF=b"
+)
 if defined INST_magatsuhi_chain (
-    set "Q=   Refill [b] every battle or [c] once per chain [installed: chain] [c]: "
+    set "Q=   Full Magatsuhi [installed: once per chain] - [b] every battle, [c] once per chain, [n] game default [c]: "
     set "DEF=c"
 )
 :ask_magatsuhi_again
 set "A="
 set /p "A=!Q!"
 if not defined A set "A=!DEF!"
-if /i "!A!"=="b" exit /b 0
+if /i "!A!"=="b" (
+    set "SEL_magatsuhi=1"
+    exit /b 0
+)
 if /i "!A!"=="c" (
+    set "SEL_magatsuhi=1"
     set "SEL_magatsuhi_chain=1"
     exit /b 0
 )
+if /i "!A!"=="n" exit /b 0
 goto :ask_magatsuhi_again
 
 :: call :ask_warned <key> "<description>" -- like :ask, with the mod's note
@@ -338,15 +347,26 @@ goto :ask_shop_cat_again
 
 :run_patcher
 echo.
-echo  Verifying patches...
-"%PYTHON%" "%~dp0patch_smtvv_freeplay.py" --game-dir "%GAMEDIR%" %FLAGS% --check
+echo  ============================================================
+echo   Step 1 of 2 - Preflight check (nothing is written)
+echo  ============================================================
+set "CHECKLOG=%TEMP%\smtvv-freeplay-check.log"
+"%PYTHON%" "%~dp0patch_smtvv_freeplay.py" --game-dir "%GAMEDIR%" %FLAGS% --check >"%CHECKLOG%" 2>&1
 if errorlevel 1 (
     echo.
+    type "%CHECKLOG%"
+    echo.
     echo  Patch verification failed. No changes were written.
+    del /Q "%CHECKLOG%" >nul 2>&1
     pause
     exit /b 1
 )
+del /Q "%CHECKLOG%" >nul 2>&1
+echo   All selected patches verified.
 echo.
+echo  ============================================================
+echo   Step 2 of 2 - Applying patches (writes game files)
+echo  ============================================================
 "%PYTHON%" "%~dp0patch_smtvv_freeplay.py" --game-dir "%GAMEDIR%" %FLAGS%
 if errorlevel 1 (
     echo.

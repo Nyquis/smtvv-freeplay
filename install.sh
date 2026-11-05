@@ -279,18 +279,21 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
         done
     }
 
-    ask_magatsuhi_mode() {
+    ask_magatsuhi() {
         local q def A
         if [ -n "$INST_MAGATSUHI_CHAIN" ]; then
-            q="Refill once per chain instead of every battle? [Y/n]: "; def=y
+            q="Full Magatsuhi [installed: once per chain] - [b] every battle, [c] once per chain, [n] game default [c]: "; def=c
+        elif [ -n "${INST[magatsuhi]:-}" ]; then
+            q="Full Magatsuhi [installed: every battle] - [b] every battle, [c] once per chain, [n] game default [b]: "; def=b
         else
-            q="Refill once per chain instead of every battle? [y/N]: "; def=n
+            q="Full Magatsuhi - [b] every battle, [c] once per chain, [n] game default [n]: "; def=n
         fi
         while true; do
             read -r -p "  $q" A
             A="${A:-$def}"
             case "$A" in
-                [yY]) SEL_MAGATSUHI_CHAIN=1; return ;;
+                [bB]) SEL[magatsuhi]=1; return ;;
+                [cC]) SEL[magatsuhi]=1; SEL_MAGATSUHI_CHAIN=1; return ;;
                 [nN]) return ;;
             esac
         done
@@ -326,8 +329,7 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
     ask_items
     ask_warned jump
     ask_shop
-    ask magatsuhi
-    if [ -n "${SEL[magatsuhi]:-}" ]; then ask_magatsuhi_mode; fi
+    ask_magatsuhi
     ask estoma
     ask_warned intro
     for k in masakado newborn; do ask "$k"; done
@@ -369,14 +371,27 @@ if [ -f "$HERE/repak/linux64/repak" ]; then
 fi
 
 echo
-echo "Verifying patches..."
-if ! "$PY" "$HERE/patch_smtvv_freeplay.py" --game-dir "$GAMEDIR" "${PATCH_FLAGS[@]}" --check; then
+echo "============================================================"
+echo " Step 1 of 2 - Preflight check (nothing is written)"
+echo "============================================================"
+CHECK_LOG="${TMPDIR:-/tmp}/smtvv-freeplay-check.$$"
+if ! "$PY" "$HERE/patch_smtvv_freeplay.py" --game-dir "$GAMEDIR" "${PATCH_FLAGS[@]}" --check >"$CHECK_LOG" 2>&1; then
+    cat "$CHECK_LOG"
+    rm -f "$CHECK_LOG"
     echo "Patch verification failed. No changes were written."
     exit 1
 fi
+rm -f "$CHECK_LOG"
+echo "  All selected patches verified."
 
 echo
-"$PY" "$HERE/patch_smtvv_freeplay.py" --game-dir "$GAMEDIR" "${PATCH_FLAGS[@]}"
+echo "============================================================"
+echo " Step 2 of 2 - Applying patches (writes game files)"
+echo "============================================================"
+if ! "$PY" "$HERE/patch_smtvv_freeplay.py" --game-dir "$GAMEDIR" "${PATCH_FLAGS[@]}"; then
+    echo "Patcher failed. See errors above."
+    exit 1
+fi
 
 if [ -f "$BIN/$EXE.patched" ]; then
     if [ ! -f "$BIN/$EXE.original" ]; then
