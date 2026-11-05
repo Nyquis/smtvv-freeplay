@@ -95,7 +95,7 @@ import stockpile
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.11.1"
+MOD_VERSION = "5.11.2"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -179,7 +179,9 @@ def file_to_va(foff: int) -> int:
 
 IMAGE_SCN_MEM_EXECUTE = 0x20000000
 CAVE_PREFIX = 64  # bytes of a candidate checked for live references
+CAVE_REF_MARGIN = 16  # bytes after a reference that must stay untouched
 LAST_CAVE_INFO: dict | None = None
+LAST_REFERENCES: list[int] = []
 _REF_CACHE: tuple[tuple, list[int], list[int]] | None = None
 
 
@@ -222,6 +224,38 @@ def _section_for(
         if raw <= foff < raw + rsize:
             return name, flags
     return "?", 0
+
+
+def _section_for_va(data: bytes | bytearray, va: int) -> tuple[str, int]:
+    """Section name and characteristics for an absolute VA."""
+    pe = struct.unpack_from("<I", data, 0x3C)[0]
+    count = struct.unpack_from("<H", data, pe + 6)[0]
+    opt = struct.unpack_from("<H", data, pe + 20)[0]
+    base = pe + 24 + opt
+    rva = va - IMAGE_BASE
+    page_match = None
+    for i in range(count):
+        h = base + 40 * i
+        name = bytes(data[h : h + 8]).rstrip(b"\0").decode("latin-1")
+        vsize, srva, rsize, _raw = struct.unpack_from("<IIII", data, h + 8)
+        flags = struct.unpack_from("<I", data, h + 36)[0]
+        end = srva + max(vsize, rsize)
+        if srva <= rva < end:
+            return name, flags
+        page_start = srva & ~0xFFF
+        page_end = (end + 0xFFF) & ~0xFFF
+        if page_start <= rva < page_end:
+            if flags & 0x80000000:
+                return name, flags
+            page_match = (name, flags)
+    return page_match or ("?", 0)
+
+
+def _assert_writable(data: bytes | bytearray, va: int, label: str) -> None:
+    name, flags = _section_for_va(data, va)
+    if not flags & 0x80000000:
+        print(f"\n  ERROR: {label} (0x{va:X}) is in non-writable section {name}")
+        sys.exit(1)
 
 
 def _reference_sets(
@@ -275,9 +309,15 @@ def _count_between(values: list[int], lo: int, hi: int) -> int:
     return bisect.bisect_left(values, hi) - bisect.bisect_left(values, lo)
 
 
+def _values_between(values: list[int], lo: int, hi: int) -> list[int]:
+    return values[bisect.bisect_left(values, lo) : bisect.bisect_left(values, hi)]
+
+
 def _cave_candidates(data: bytes | bytearray, min_size: int) -> list[dict]:
+    global LAST_REFERENCES
     sections, code_raw, code_rsize, code_rva = _code_section(data)
     targets, ptrs = _reference_sets(data, code_raw, code_rsize, code_rva)
+    LAST_REFERENCES = sorted(set(targets) | set(ptrs))
     candidates = []
     for m in re.finditer(
         b"\xcc{%d,}" % min_size, data[code_raw : code_raw + code_rsize]
@@ -297,15 +337,22 @@ def _cave_candidates(data: bytes | bytearray, min_size: int) -> list[dict]:
         total_refs = _count_between(targets, va, va + length) + _count_between(
             ptrs, va, va + length
         )
+        refs = sorted(
+            set(_values_between(targets, va, va + length))
+            | set(_values_between(ptrs, va, va + length))
+        )
         boundary_ok = before in (0xC3, 0xC2)
         candidates.append(
             {
                 "start": start,
                 "length": length,
+                "va": va,
                 "section": section,
                 "exec": executable,
+                "writable": bool(flags & 0x80000000),
                 "before": before,
                 "after": after,
+                "refs": refs,
                 "prefix_refs": prefix_refs,
                 "total_refs": total_refs,
                 "boundary": boundary_ok,
@@ -345,16 +392,33 @@ def find_cc_cave(
     return picked[0]["start"], picked[0]["length"]
 
 
+def _free_spans(candidate: dict, min_size: int) -> list[tuple[int, int]]:
+    """Split one CC run around its references, leaving the referenced byte
+    and a small margin untouched."""
+    start = candidate["start"]
+    end = start + candidate["length"]
+    spans = []
+    cursor = start
+    for ref_va in candidate["refs"]:
+        ref_off = start + (ref_va - candidate["va"])
+        if ref_off > cursor:
+            spans.append((cursor, ref_off - cursor))
+        cursor = max(cursor, ref_off + CAVE_REF_MARGIN)
+    if end > cursor:
+        spans.append((cursor, end - cursor))
+    return [(o, n) for o, n in spans if n >= min_size]
+
+
 def find_cc_caves(
     data: bytes | bytearray,
     min_size: int,
     count: int,
     exclude: tuple[int, int] | None = None,
 ) -> list[tuple[int, int]]:
-    """Up to count CC-padded regions in .rdata, largest first.
+    """Up to count reference-free CC-padded spans in .rdata, largest first.
 
-    Small side caves are used for self-contained thunks; length matters more
-    than the reference prefix, so safe runs only win ties.
+    Side thunks must not land on a branch target or pointer, so each run is
+    split at its detected references before sizing.
     """
     runs = _cave_candidates(data, min_size)
     if exclude is not None:
@@ -363,9 +427,12 @@ def find_cc_caves(
             for r in runs
             if r["start"] + r["length"] <= exclude[0] or r["start"] >= exclude[1]
         ]
-    runs = [r for r in runs if r["exec"]]
-    runs.sort(key=lambda r: (r["length"], r["safe"]), reverse=True)
-    return [(r["start"], r["length"]) for r in runs[:count]]
+    spans = []
+    for r in runs:
+        if r["exec"]:
+            spans.extend(_free_spans(r, min_size))
+    spans.sort(key=lambda s: s[1], reverse=True)
+    return spans[:count]
 
 
 def locate_game_dir(hint: str | None = None) -> str | None:
@@ -755,17 +822,30 @@ def main() -> None:
         print("\n  ERROR: no suitable CC cave found in .rdata.")
         sys.exit(1)
     cave_off, cave_len = cave
+    gameplay_patches.set_cave_references(LAST_REFERENCES)
     info = LAST_CAVE_INFO
     if info is not None:
         print(
             f"  Cave check  : 0x{cave_off:08X}  len={cave_len}  "
             f"section={info['section']}  exec={'yes' if info['exec'] else 'no'}  "
+            f"write={'no' if not info['writable'] else 'yes'}  "
             f"boundary={info['before']:02X}  "
             f"refs(first {CAVE_PREFIX})={info['prefix_refs']}  "
-            f"refs(run)={info['total_refs']}"
+            f"refs(run)={info['total_refs']}  "
+            f"refs(scan)={len(LAST_REFERENCES)}"
         )
         if not info["safe"]:
             print("  WARNING: cave safety checks did not all pass")
+    for label, addr in (
+        ("STOCK_ACTIVE", stockpile.STOCK_ACTIVE),
+        ("STOCK_LAST_ID", stockpile.STOCK_LAST_ID),
+        ("STOCK_HIDDEN", stockpile.STOCK_HIDDEN),
+        ("AUTOSAVE_PENDING", autosave.AUTOSAVE_PENDING),
+        ("AUTOSAVE_COUNT", autosave.AUTOSAVE_COUNT),
+        ("AUTOSAVE_RESULT", autosave.AUTOSAVE_RESULT),
+        ("AUTOSAVE_BUSY", autosave.AUTOSAVE_BUSY),
+    ):
+        _assert_writable(data, addr, label)
     next_cave_off = cave_off
     patch_num = 0
     enabled = [
@@ -1052,6 +1132,13 @@ def main() -> None:
     # PATCH: Battle Refill / Superjump / Full Magatsuhi
     # ==================================================================
     cave_end = cave_off + cave_len
+    slack = None
+    if do_stockpile or do_magatsuhi or autosave_slot is not None:
+        trial = bytearray(data)
+        slack = gameplay_patches.slack_caves(trial)
+        data[:] = trial  # padding refilled with CC only
+        del trial
+
     # ==================================================================
     # PATCH: Stockpile (exe + item list pak; reads the ItemTable carry limits)
     # ==================================================================
@@ -1066,14 +1153,19 @@ def main() -> None:
             )
             limits = stockpile.battle_item_limits(item_exp)
             start = next_cave_off
-            side = find_cc_caves(
-                data, min_size=96, count=3, exclude=(cave_off, cave_end)
-            )
+            side = [
+                [o, o + n]
+                for o, n in find_cc_caves(
+                    data, min_size=96, count=3, exclude=(cave_off, cave_end)
+                )
+            ]
+            if slack:
+                side += slack
             if not side:
                 raise RuntimeError("no second code cave")
             trial = bytearray(data)  # applied only if the whole patch fits
             result = stockpile.patch_stockpile(
-                trial, next_cave_off, cave_end, limits, [[o, o + n] for o, n in side]
+                trial, next_cave_off, cave_end, limits, side
             )
             if result is None:
                 raise RuntimeError("AOB mismatch")
@@ -1120,12 +1212,6 @@ def main() -> None:
     # ==================================================================
     # PATCH: Full Magatsuhi / Autosave after battle (section padding caves)
     # ==================================================================
-    slack = None
-    if do_magatsuhi or autosave_slot is not None:
-        trial = bytearray(data)
-        slack = gameplay_patches.slack_caves(trial)
-        data[:] = trial  # padding refilled with CC only
-        del trial
     if do_magatsuhi:
         try:
             trial = bytearray(data)  # applied only if the whole patch fits

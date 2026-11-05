@@ -48,7 +48,7 @@ def patch_leylines(data: bytearray, cave_off: int, cave_end: int) -> int | None:
     code = a.build()
 
     dest = va(cave_off)
-    cave_off = _place(data, cave_off, cave_end, code)
+    cave_off = _place(data, cave_off, cave_end, code, base_va=dest, check_refs=True)
     _jmp_site(data, POI_VISIBLE_SITE, dest, len(POI_VISIBLE_ORIG))
     return cave_off
 

@@ -7,10 +7,27 @@ were not found (the patch is then skipped).
 
 from __future__ import annotations
 
+import bisect
 import struct
 
 RDATA_RAW = 0x600
 RDATA_VA = 0x140001000
+
+# Absolute VAs that already have a branch or pointer into the image. Layout
+# code must not overwrite them; the patcher fills this from its reference scan.
+CAVE_REFS: list[int] = []
+
+
+def set_cave_references(refs: list[int]) -> None:
+    global CAVE_REFS
+    CAVE_REFS = sorted(refs)
+
+
+def _range_has_reference(base_va: int, length: int) -> bool:
+    if not CAVE_REFS:
+        return False
+    i = bisect.bisect_left(CAVE_REFS, base_va)
+    return i < len(CAVE_REFS) and CAVE_REFS[i] < base_va + length
 
 
 def va(foff: int) -> int:
@@ -90,11 +107,27 @@ class Asm:
         return bytes(self.b)
 
 
-def _place(data: bytearray, cave_off: int, cave_end: int, code: bytes) -> int:
+def _place(
+    data: bytearray,
+    cave_off: int,
+    cave_end: int,
+    code: bytes,
+    *,
+    base_va: int | None = None,
+    check_refs: bool = False,
+) -> int:
     if cave_off + len(code) > cave_end:
         raise RuntimeError("code cave too small")
     for i in range(len(code)):
         assert data[cave_off + i] == 0xCC
+    if check_refs:
+        if base_va is None:
+            raise RuntimeError("base_va required for reference-checked placement")
+        if _range_has_reference(base_va, len(code)):
+            raise RuntimeError(
+                f"code cave range 0x{base_va:X}..0x{base_va + len(code):X} "
+                "contains a reference"
+            )
     data[cave_off : cave_off + len(code)] = code
     return cave_off + ((len(code) + 15) & ~15)
 
@@ -116,8 +149,11 @@ IMAGE_BASE = 0x140000000
 
 
 def slack_caves(data: bytearray) -> list[list[int]]:
-    """Zero padding in SLACK_SECTIONS as [file start, file end, va - file]
-    cave entries, filled with CC so _place accepts them."""
+    """Raw alignment slack in SLACK_SECTIONS as [file start, file end,
+    va - file], filled with CC so _place accepts them.
+
+    The range starts after the section's virtual size, so it is section
+    padding, not a zero-initialised static object."""
     pe = struct.unpack_from("<I", data, 0x3C)[0]
     nsec = struct.unpack_from("<H", data, pe + 6)[0]
     sec = pe + 24 + struct.unpack_from("<H", data, pe + 20)[0]
@@ -129,7 +165,9 @@ def slack_caves(data: bytearray) -> list[list[int]]:
         flags = struct.unpack_from("<I", data, h + 36)[0]
         if name not in SLACK_SECTIONS or not flags & 0x20000000:
             continue
-        start = raw + ((vsize + 15) & ~15) + 16
+        virtual_end = raw + ((vsize + 15) & ~15)
+        start = virtual_end + 16
+        assert start >= virtual_end
         end = start
         while end < raw + rsize and data[end] in (0, 0xCC):
             end += 1
@@ -146,7 +184,7 @@ def put_code(data: bytearray, caves: list[list[int]], build) -> int:
         code = build(Asm(c[0] + c[2])).build()
         if c[0] + len(code) <= c[1]:
             dest = c[0] + c[2]
-            c[0] = _place(data, c[0], c[1], code)
+            c[0] = _place(data, c[0], c[1], code, base_va=dest, check_refs=True)
             return dest
     raise RuntimeError("code cave too small")
 

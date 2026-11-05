@@ -154,11 +154,11 @@ def patch_stockpile(data: bytearray, cave_off: int, cave_end: int,
     max_orig = ITEM_GET_MAX + 5 + struct.unpack_from("<i", data, off(ITEM_GET_MAX) + 1)[0]
     def side_put(build) -> int:
         for c in side:
-            code = build(Asm(va(c[0]))).build()
+            base = c[0] + c[2] if len(c) > 2 else va(c[0])
+            code = build(Asm(base)).build()
             if c[0] + len(code) <= c[1]:
-                dest = va(c[0])
-                c[0] = _place(data, c[0], c[1], code)
-                return dest
+                c[0] = _place(data, c[0], c[1], code, base_va=base, check_refs=True)
+                return base
         raise RuntimeError("code cave too small")
 
     def max_hook(a):
