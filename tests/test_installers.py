@@ -45,6 +45,14 @@ def test_every_linux_feature_is_asked():
     assert 'ask "$k"' in text
 
 
+def test_installers_verify_before_applying():
+    bat, sh = _read(BAT), _read(SH)
+    for text in (bat, sh):
+        assert "Verifying patches" in text
+        assert "Patch verification failed" in text
+        assert "--check" in text
+
+
 def test_installers_offer_leylines():
     bat, sh = _read(BAT), _read(SH)
     for text in (bat, sh):

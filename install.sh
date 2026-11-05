@@ -345,6 +345,13 @@ if [ -f "$HERE/repak/linux64/repak" ]; then
 fi
 
 echo
+echo "Verifying patches..."
+if ! "$PY" "$HERE/patch_smtvv_freeplay.py" --game-dir "$GAMEDIR" "${PATCH_FLAGS[@]}" --check; then
+    echo "Patch verification failed. No changes were written."
+    exit 1
+fi
+
+echo
 "$PY" "$HERE/patch_smtvv_freeplay.py" --game-dir "$GAMEDIR" "${PATCH_FLAGS[@]}"
 
 if [ -f "$BIN/$EXE.patched" ]; then

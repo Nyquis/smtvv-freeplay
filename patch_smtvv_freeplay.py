@@ -96,7 +96,7 @@ import stockpile
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.11.4"
+MOD_VERSION = "5.11.5"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -812,6 +812,34 @@ def main() -> None:
     if args.leylines and args.reveal != "none":
         print("  NOTE: --leylines replaces the legacy --reveal pak; ignoring --reveal")
     autosave_slot = args.autosave_slot
+    results: dict[str, bool] = {}
+    failed: list[str] = []
+    selected = {
+        "essences": do_essences,
+        "heal": do_heal,
+        "mimans": do_mimans,
+        "leylines": do_leylines,
+        "miracles": do_miracles,
+        "compendium": do_compendium,
+        "refill": do_refill,
+        "stockpile": do_stockpile,
+        "jump": do_jump,
+        "magatsuhi": do_magatsuhi,
+        "shop": do_shop,
+        "intro": do_intro,
+        "masakado": do_masakado,
+        "newborn": do_newborn,
+        "estoma": do_estoma,
+        "autosave": autosave_slot is not None,
+        "reveal": do_reveal,
+    }
+
+    def ok(key: str) -> None:
+        results[key] = True
+
+    def fail(key: str) -> None:
+        if key not in failed:
+            failed.append(key)
 
     game_dir = locate_game_dir(args.game_dir)
     if game_dir is None:
@@ -892,6 +920,8 @@ def main() -> None:
             print("  Check only: a real run would replace .original with this build.")
     else:
         print("  Using original backup.")
+    if not check and os.path.isfile(out_path):
+        os.remove(out_path)
     print(f"  Reading {os.path.basename(source)} ...")
     with open(source, "rb") as fh:
         data = bytearray(fh.read())
@@ -1013,6 +1043,7 @@ def main() -> None:
         print(f"    Code cave     : 0x{p_off:08X}  ({len(sc)} bytes)")
         print(f"    Trampoline    : 0x{TRAMP_OFFSET:08X}  -> cave")
         next_cave_off = p_off + ((len(sc) + 15) & ~15)
+        ok("essences")
 
     # ==================================================================
     # PATCH: Leyline Auto-Heal
@@ -1021,6 +1052,7 @@ def main() -> None:
         ry_actual = bytes(data[RYUKETSU_TRAMP_OFFSET : RYUKETSU_TRAMP_OFFSET + 5])
         if ry_actual != RYUKETSU_TRAMP_ORIG:
             print("\n  WARNING: Leyline AOB mismatch — skipping heal patch")
+            fail("heal")
         else:
             ry_disp = struct.unpack_from("<i", data, RYUKETSU_TRAMP_OFFSET + 1)[0]
             ry_tramp_va = file_to_va(RYUKETSU_TRAMP_OFFSET)
@@ -1060,6 +1092,7 @@ def main() -> None:
             print(f"    Code cave     : 0x{h_off:08X}  ({len(hsc)} bytes)")
             print(f"    Trampoline    : 0x{RYUKETSU_TRAMP_OFFSET:08X}  -> cave")
             next_cave_off = h_off + ((len(hsc) + 15) & ~15)
+            ok("heal")
 
     # ==================================================================
     # PATCH: Miman Reveal
@@ -1071,11 +1104,13 @@ def main() -> None:
                 f"\n  WARNING: Miman AOB mismatch at "
                 f"0x{MIMAN_POS_CHECK_OFFSET:08X} - skipping"
             )
+            fail("mimans")
         else:
             data[MIMAN_POS_CHECK_OFFSET : MIMAN_POS_CHECK_OFFSET + 3] = b"\xb0\x01\xc3"
             patch_num += 1
             print(f"\n  [{patch_num}/{total}] Miman Reveal")
             print(f"    Position check: 0x{MIMAN_POS_CHECK_OFFSET:08X}  -> true")
+            ok("mimans")
 
     # ==================================================================
     # PATCH: Leyline Founts on the Main Map
@@ -1089,12 +1124,14 @@ def main() -> None:
             result = None
         if result is None:
             print("\n  WARNING: Leyline icon AOB mismatch - skipping")
+            fail("leylines")
         else:
             next_cave_off = result
             patch_num += 1
             print(f"\n  [{patch_num}/{total}] Leyline Founts")
             print(f"    Code cave     : 0x{start:08X}  ({next_cave_off - start} bytes)")
             print("    Fog bypass    : E_MINIMAP_POI_TYPE_RYUKETSU")
+            ok("leylines")
 
     # ==================================================================
     # PATCH: NG+ Miracles Unlock
@@ -1193,15 +1230,20 @@ def main() -> None:
             try:
                 if check:
                     print("    Data pak      : check only")
+                    ok("miracles")
                 else:
                     build_miracle_pak(game_dir)
                     print(f"    Data pak      : {MIRACLE_PAK}")
+                    ok("miracles")
             except RuntimeError as exc:
                 print(f"    WARNING: NG+ miracle data pak not built — {exc}")
                 print(
                     "             The miracle shop hooks are still "
                     "installed, but some NG+ miracles may stay locked."
                 )
+                fail("miracles")
+        else:
+            fail("miracles")
 
     # ==================================================================
     # PATCH: Free Compendium
@@ -1213,11 +1255,13 @@ def main() -> None:
                 f"\n  WARNING: Compendium AOB mismatch at "
                 f"0x{DEVIL_COST_OFFSET:08X} - skipping"
             )
+            fail("compendium")
         else:
             data[DEVIL_COST_OFFSET : DEVIL_COST_OFFSET + 3] = b"\x33\xc0\xc3"
             patch_num += 1
             print(f"\n  [{patch_num}/{total}] Free Compendium")
             print(f"    Cost formula  : 0x{DEVIL_COST_OFFSET:08X}  -> 0")
+            ok("compendium")
 
     # ==================================================================
     # PATCH: Battle Refill / Superjump / Full Magatsuhi
@@ -1272,17 +1316,21 @@ def main() -> None:
             )
         except RuntimeError as exc:
             print(f"\n  WARNING: Stockpile skipped - {exc}")
+            fail("stockpile")
         if stockpile_ok:
             try:
                 if check:
                     print("    Data pak      : check only")
+                    ok("stockpile")
                 else:
                     stockpile.build_stock_pak(
                         game_dir, PAKS_SUBPATH, SOURCE_PAK, repak, run_repak
                     )
                     print(f"    Data pak      : {stockpile.STOCK_PAK}")
+                    ok("stockpile")
             except RuntimeError as exc:
                 print(f"    WARNING: Stockpile data pak not built - {exc}")
+                fail("stockpile")
 
     for on, label, builder in (
         (do_refill, "Battle Refill", gameplay_patches.patch_refill),
@@ -1292,13 +1340,16 @@ def main() -> None:
             continue
         start = next_cave_off
         result = builder(data, next_cave_off, cave_end)
+        key = "refill" if label == "Battle Refill" else "jump"
         if result is None:
             print(f"\n  WARNING: {label} AOB mismatch - skipping")
+            fail(key)
             continue
         next_cave_off = result
         patch_num += 1
         print(f"\n  [{patch_num}/{total}] {label}")
         print(f"    Code cave     : 0x{start:08X}  ({next_cave_off - start} bytes)")
+        ok(key)
 
     # ==================================================================
     # PATCH: Full Magatsuhi / Autosave after battle (section padding caves)
@@ -1312,8 +1363,10 @@ def main() -> None:
             del trial
             patch_num += 1
             print(f"\n  [{patch_num}/{total}] Full Magatsuhi")
+            ok("magatsuhi")
         except RuntimeError as exc:
             print(f"\n  WARNING: Full Magatsuhi skipped - {exc}")
+            fail("magatsuhi")
     if autosave_slot is not None:
         area_labels = None
         try:
@@ -1336,8 +1389,10 @@ def main() -> None:
             print(f"    Save slot     : {autosave_slot}")
             if area_labels:
                 print(f"    Location names: {len(area_labels)}")
+            ok("autosave")
         except RuntimeError as exc:
             print(f"\n  WARNING: Autosave skipped - {exc}")
+            fail("autosave")
 
     # ==================================================================
     # PATCH: Shop stock and prices (data pak only)
@@ -1351,11 +1406,13 @@ def main() -> None:
                 raise RuntimeError("bundled repak tool not found")
             if check:
                 print("    Data pak      : check only")
+                ok("shop")
             else:
                 shop_pak.build_shop_pak(
                     game_dir, PAKS_SUBPATH, SOURCE_PAK, repak, run_repak, shop_modes
                 )
                 print(f"    Data pak      : {shop_pak.SHOP_PAK}")
+                ok("shop")
             print(
                 "    Categories    : "
                 + ", ".join(
@@ -1366,6 +1423,7 @@ def main() -> None:
             )
         except RuntimeError as exc:
             print(f"    WARNING: shop data pak not built - {exc}")
+            fail("shop")
 
     # ==================================================================
     # PATCH: Skip Intro (data pak + title refocus)
@@ -1373,26 +1431,35 @@ def main() -> None:
     if do_intro:
         patch_num += 1
         print(f"\n  [{patch_num}/{total}] Skip Intro")
+        intro_pak_ok = False
         repak = find_repak()
         try:
             if repak is None:
                 raise RuntimeError("bundled repak tool not found")
             if check:
                 print("    Data pak      : check only")
+                intro_pak_ok = True
             else:
                 boot_pak.build_boot_pak(
                     game_dir, PAKS_SUBPATH, SOURCE_PAK, repak, run_repak
                 )
                 print(f"    Data pak      : {boot_pak.BOOT_PAK}")
+                intro_pak_ok = True
         except RuntimeError as exc:
             print(f"    WARNING: intro data pak not built - {exc}")
+            fail("intro")
         start = next_cave_off
         result = gameplay_patches.patch_refocus(data, next_cave_off, cave_end)
         if result is None:
             print("    WARNING: title refocus AOB mismatch - skipping")
+            fail("intro")
         else:
             next_cave_off = result
             print(f"    Code cave     : 0x{start:08X}  ({next_cave_off - start} bytes)")
+            if intro_pak_ok:
+                ok("intro")
+            else:
+                fail("intro")
 
     # ==================================================================
     # PATCH: Masakado Unlock (data pak only)
@@ -1406,11 +1473,14 @@ def main() -> None:
                 raise RuntimeError("bundled repak tool not found")
             if check:
                 print("    Data pak      : check only")
+                ok("masakado")
             else:
                 quest_pak.build_quest_pak(game_dir, PAKS_SUBPATH, repak, run_repak)
                 print(f"    Data pak      : {quest_pak.QUEST_PAK}")
+                ok("masakado")
         except RuntimeError as exc:
             print(f"    WARNING: quest data pak not built - {exc}")
+            fail("masakado")
 
     # ==================================================================
     # PATCH: Newborn Clears Compendium (exe + text pak)
@@ -1420,6 +1490,7 @@ def main() -> None:
         result = newborn.patch_newborn(data, next_cave_off, cave_end)
         if result is None:
             print("\n  WARNING: Newborn Clears Compendium AOB mismatch - skipping")
+            fail("newborn")
         else:
             next_cave_off = result
             patch_num += 1
@@ -1431,11 +1502,14 @@ def main() -> None:
                     raise RuntimeError("bundled repak tool not found")
                 if check:
                     print("    Data pak      : check only")
+                    ok("newborn")
                 else:
                     newborn.build_newborn_pak(game_dir, PAKS_SUBPATH, repak, run_repak)
                     print(f"    Data pak      : {newborn.NEWBORN_PAK}")
+                    ok("newborn")
             except RuntimeError as exc:
                 print(f"    WARNING: carry-over text pak not built - {exc}")
+                fail("newborn")
 
     # ==================================================================
     # PATCH: Free Estoma (data pak only)
@@ -1449,6 +1523,7 @@ def main() -> None:
             print(f"\n  [{patch_num}/{total}] Free Estoma")
             if check:
                 print("    Data pak      : check only")
+                ok("estoma")
             else:
                 old_costs = estoma.build_estoma_pak(
                     game_dir, PAKS_SUBPATH, SOURCE_PAK, repak_tool, run_repak
@@ -1458,8 +1533,10 @@ def main() -> None:
                     "    Costs zeroed  : "
                     + ", ".join(f"{name}={value}" for name, value in old_costs.items())
                 )
+                ok("estoma")
         except RuntimeError as exc:
             print(f"\n  WARNING: Free Estoma skipped - {exc}")
+            fail("estoma")
 
     # ==================================================================
     # PATCH: Map Reveal (data pak only)
@@ -1473,18 +1550,31 @@ def main() -> None:
                 raise RuntimeError("bundled repak tool not found")
             if check:
                 print("    Data pak      : check only")
+                ok("reveal")
             else:
                 changed = reveal.build_reveal_pak(
                     game_dir, PAKS_SUBPATH, SOURCE_PAK, repak, run_repak, args.reveal
                 )
                 print(f"    Data pak      : {reveal.REVEAL_PAK}")
                 print(f"    Icons revealed: {changed}")
+                ok("reveal")
         except RuntimeError as exc:
             print(f"    WARNING: map reveal pak not built - {exc}")
+            fail("reveal")
 
+    failed_selected = [key for key in failed if selected.get(key)]
     if check:
+        if failed_selected:
+            print(f"\n  Check summary: failed: {', '.join(failed_selected)}")
+            print("\n  Check failed - nothing was written.")
+            sys.exit(1)
         print("\n  Check complete - nothing was written.")
         return
+    if failed_selected:
+        print(
+            "\n  WARNING: partial install; not fully applied: "
+            + ", ".join(failed_selected)
+        )
 
     # ------------------------------------------------------------------
     # Backup & save
@@ -1503,28 +1593,34 @@ def main() -> None:
     # Feature record for the installer; it becomes FEATURES_FILE once the
     # patched executable is in place.
     features = {
-        "essences": do_essences,
-        "heal": do_heal,
-        "mimans": do_mimans,
-        "leylines": do_leylines,
-        "miracles": do_miracles,
-        "compendium": do_compendium,
-        "jump": do_jump,
-        "magatsuhi": do_magatsuhi,
-        "intro": do_intro,
-        "masakado": do_masakado,
-        "newborn": do_newborn,
-        "estoma": do_estoma,
+        "essences": results.get("essences", False),
+        "heal": results.get("heal", False),
+        "mimans": results.get("mimans", False),
+        "leylines": results.get("leylines", False),
+        "miracles": results.get("miracles", False),
+        "compendium": results.get("compendium", False),
+        "jump": results.get("jump", False),
+        "magatsuhi": results.get("magatsuhi", False),
+        "intro": results.get("intro", False),
+        "masakado": results.get("masakado", False),
+        "newborn": results.get("newborn", False),
+        "estoma": results.get("estoma", False),
     }
     lines = [f"{k}={int(v)}" for k, v in features.items()]
     lines.append(
         "itemhacks="
-        + ("stockpile" if do_stockpile else "refill" if do_refill else "none")
+        + (
+            "stockpile"
+            if results.get("stockpile")
+            else "refill"
+            if results.get("refill")
+            else "none"
+        )
     )
-    lines.append(f"autosave={autosave_slot or 0}")
+    lines.append(f"autosave={autosave_slot if results.get('autosave') else 0}")
     for category, mode in shop_modes.items():
-        lines.append(f"shop_{category}={mode}")
-    lines.append(f"reveal={args.reveal}")
+        lines.append(f"shop_{category}={mode if results.get('shop') else 'default'}")
+    lines.append(f"reveal={args.reveal if results.get('reveal') else 'none'}")
     lines.append(f"game_hash={live_hash}")
     with open(
         os.path.join(os.path.dirname(out_path), FEATURES_FILE + ".new"),

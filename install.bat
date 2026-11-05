@@ -314,6 +314,15 @@ goto :ask_shop_cat_again
 
 :run_patcher
 echo.
+echo  Verifying patches...
+"%PYTHON%" "%~dp0patch_smtvv_freeplay.py" --game-dir "%GAMEDIR%" %FLAGS% --check
+if errorlevel 1 (
+    echo.
+    echo  Patch verification failed. No changes were written.
+    pause
+    exit /b 1
+)
+echo.
 "%PYTHON%" "%~dp0patch_smtvv_freeplay.py" --game-dir "%GAMEDIR%" %FLAGS%
 if errorlevel 1 (
     echo.
