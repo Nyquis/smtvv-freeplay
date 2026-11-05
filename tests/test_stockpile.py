@@ -8,6 +8,14 @@ import gameplay_patches as gp
 import stockpile
 
 
+def test_show_count_clamps_boss_rush_refill():
+    assert stockpile._show_count(99, 0, 5) == (5, 94)
+    assert stockpile._show_count(99, 94, 5) == (5, 94)
+    assert stockpile._show_count(98, 94, 5) == (4, 94)
+    assert stockpile._show_count(3, 94, 5) == (0, 94)
+    assert stockpile._show_count(99, 0, 0) == (99, 0)
+
+
 def test_cave_va_for_two_element_entry():
     assert stockpile._cave_va([0x503308, 0x5033C4]) == 0x140503D08
 

@@ -81,6 +81,20 @@ def battle_item_limits(uexp: bytes) -> dict[int, int]:
     return limits
 
 
+def _show_count(raw: int, hidden: int, limit: int) -> tuple[int, int]:
+    """Visible battle count and updated hidden excess.
+
+    Boss Rush refills the real stock after E_BTL_STEP_PRE, so the snapshot can
+    be stale. Recomputing the excess on a read keeps the menu at the normal
+    per-battle limit.
+    """
+    shown = max(raw - hidden, 0)
+    if limit and shown > limit:
+        hidden = raw - limit
+        shown = limit
+    return shown, hidden
+
+
 def _cave_va(c: list[int]) -> int:
     """VA of a side-cave entry.
 
@@ -123,17 +137,41 @@ def _patch_stockpile(data: bytearray, cave_off: int, cave_end: int,
 
     def u32(v): return struct.pack("<I", v).hex()
 
-    # ItemGetNum: subtract the hidden stock while a battle is running.
+    # Reserve the limits table before the hooks so both the battle and menu
+    # hooks can read it. It is read-only data in the code cave.
+    table_size = (len(limits) + 15) & ~15
+    if cave_off + table_size > cave_end:
+        return None
+    for i in range(len(limits)):
+        if data[cave_off + i] != 0xCC:
+            return None
+    limits_va = va(cave_off)
+    data[cave_off : cave_off + len(limits)] = limits
+    cave_off += table_size
+
+    # ItemGetNum: subtract the hidden stock while a battle is running, and
+    # re-clamp when a Boss Rush refill lands after the PRE snapshot.
     a = Asm(va(cave_off))
     a.raw("53 48 83 EC 20 89 CB")                 # push rbx; sub rsp,20h; mov ebx,ecx
     a.call(num_orig)
     a._rel("8A 0D", STOCK_ACTIVE).raw("84 C9").je("done")
     a.raw("81 FB" + u32(ID_MAX)).ja("done")
+    a.raw("89 C2")                                # mov edx, eax (raw)
     a._rel("48 8D 0D", STOCK_HIDDEN)
     a.raw("0F B6 0C 19")                          # movzx ecx, byte [rcx+rbx]
     a.raw("29 C8")                                # sub eax, ecx
-    a._rel("0F 8D", "done")                       # jge done
-    a.raw("31 C0")
+    a._rel("0F 8D", "nonneg")                     # jge nonneg
+    a.raw("31 C0")                                # xor eax,eax
+    a.label("nonneg")
+    a._rel("4C 8D 05", limits_va)                 # lea r8, [limits]
+    a.raw("41 0F B6 0C 18")                       # movzx ecx, byte [r8+rbx]
+    a.raw("85 C9").je("done")                     # test ecx,ecx; je done
+    a.raw("39 C8")                                # cmp eax, ecx
+    a._rel("0F 86", "done")                       # jbe done
+    a.raw("29 CA")                                # sub edx, ecx
+    a._rel("4C 8D 05", STOCK_HIDDEN)              # lea r8, [hidden]
+    a.raw("41 88 14 18")                          # mov [r8+rbx], dl
+    a.raw("89 C8")                                # mov eax, ecx
     a.label("done")
     a.raw("48 83 C4 20 5B C3")
     dest = va(cave_off)
@@ -150,7 +188,7 @@ def _patch_stockpile(data: bytearray, cave_off: int, cave_end: int,
         a.raw("83 F8 %02x" % BTL_STEP_PRE).jne("end")
         a.raw("BE 01 00 00 00")                   # mov esi, 1
         a.label("loop")
-        a.rip("48 8D 05", "limits")
+        a._rel("48 8D 05", limits_va)
         a.raw("0F B6 3C 30")                      # movzx edi, byte [rax+rsi]
         a.raw("31 C0 85 FF").je("store")          # no limit: hide nothing
         a.raw("89 F1").call(num_orig)
@@ -169,9 +207,6 @@ def _patch_stockpile(data: bytearray, cave_off: int, cave_end: int,
         a.raw("31 C0")._rel("88 05", STOCK_ACTIVE)
         a.label("done")
         a.raw("48 83 C4 20 5F 5E 5B C3")
-        a.label("limits")
-        limits_va = va(cave_off) + len(a.b)
-        a.b += limits
         dest = va(cave_off)
         cave_off = _place(data, cave_off, cave_end, a.build())
         _jmp_site(data, t, dest, 5)
