@@ -70,12 +70,14 @@ from common Steam library locations.
 from __future__ import annotations
 
 import argparse
+import bisect
 import os
 import platform
 import re
 import shutil
 import struct
 import sys
+import zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import autosave
@@ -93,7 +95,7 @@ import stockpile
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.11.0"
+MOD_VERSION = "5.11.1"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -116,6 +118,7 @@ ESSENCE_ID_MIN = 311  # 0x137
 ESSENCE_ID_MAX = 615  # 0x267
 
 # PE section layout (for VA <-> file-offset conversion in .rdata)
+IMAGE_BASE = 0x140000000
 RDATA_RAW = 0x600
 RDATA_VA = 0x140001000
 
@@ -174,27 +177,172 @@ def file_to_va(foff: int) -> int:
     return RDATA_VA + (foff - RDATA_RAW)
 
 
+IMAGE_SCN_MEM_EXECUTE = 0x20000000
+CAVE_PREFIX = 64  # bytes of a candidate checked for live references
+LAST_CAVE_INFO: dict | None = None
+_REF_CACHE: tuple[tuple, list[int], list[int]] | None = None
+
+
+def _pe_sections(
+    data: bytes | bytearray,
+) -> list[tuple[str, int, int, int, int]]:
+    """(name, raw offset, raw size, virtual address, characteristics)."""
+    pe = struct.unpack_from("<I", data, 0x3C)[0]
+    count = struct.unpack_from("<H", data, pe + 6)[0]
+    opt = struct.unpack_from("<H", data, pe + 20)[0]
+    base = pe + 24 + opt
+    sections = []
+    for i in range(count):
+        h = base + 40 * i
+        name = bytes(data[h : h + 8]).rstrip(b"\0").decode("latin-1")
+        _vsize, rva, rsize, raw = struct.unpack_from("<IIII", data, h + 8)
+        flags = struct.unpack_from("<I", data, h + 36)[0]
+        sections.append((name, raw, rsize, rva, flags))
+    return sections
+
+
+def _code_section(
+    data: bytes | bytearray,
+) -> tuple[list[tuple[str, int, int, int, int]], int, int, int]:
+    """The executable .rdata section, plus its raw offset, size and RVA."""
+    sections = _pe_sections(data)
+    for name, raw, rsize, rva, flags in sections:
+        if name == ".rdata" and flags & IMAGE_SCN_MEM_EXECUTE:
+            return sections, raw, rsize, rva
+    for name, raw, rsize, rva, flags in sections:
+        if raw <= RDATA_RAW < raw + rsize:
+            return sections, raw, rsize, rva
+    raise RuntimeError("no executable .rdata section")
+
+
+def _section_for(
+    sections: list[tuple[str, int, int, int, int]], foff: int
+) -> tuple[str, int]:
+    for name, raw, rsize, _rva, flags in sections:
+        if raw <= foff < raw + rsize:
+            return name, flags
+    return "?", 0
+
+
+def _reference_sets(
+    data: bytes | bytearray, code_raw: int, code_rsize: int, code_rva: int
+) -> tuple[list[int], list[int]]:
+    """Sorted VAs of direct rel32 branches in the code section and of
+    8-byte image pointers anywhere in the file."""
+    global _REF_CACHE
+    key = (
+        len(data),
+        code_raw,
+        code_rsize,
+        code_rva,
+        zlib.crc32(memoryview(data)[code_raw : code_raw + code_rsize]),
+    )
+    if _REF_CACHE is not None and _REF_CACHE[0] == key:
+        return _REF_CACHE[1], _REF_CACHE[2]
+
+    code = data[code_raw : code_raw + code_rsize]
+    targets: list[int] = []
+    for m in re.finditer(rb"[\xe8\xe9]", code):
+        i = m.start()
+        if i + 5 > len(code):
+            continue
+        site = IMAGE_BASE + code_rva + i
+        targets.append(site + 5 + struct.unpack_from("<i", code, i + 1)[0])
+    for m in re.finditer(rb"\x0f[\x80-\x8f]", code):
+        i = m.start()
+        if i + 6 > len(code):
+            continue
+        site = IMAGE_BASE + code_rva + i
+        targets.append(site + 6 + struct.unpack_from("<i", code, i + 2)[0])
+
+    pointers = set()
+    for m in re.finditer(rb"\x01\x00\x00\x00", data):
+        i = m.start()
+        if i < 4:
+            continue
+        low = struct.unpack_from("<I", data, i - 4)[0]
+        value = 0x100000000 + low
+        if IMAGE_BASE <= value < 0x14D000000:
+            pointers.add(value)
+
+    targets.sort()
+    ptrs = sorted(pointers)
+    _REF_CACHE = (key, targets, ptrs)
+    return targets, ptrs
+
+
+def _count_between(values: list[int], lo: int, hi: int) -> int:
+    return bisect.bisect_left(values, hi) - bisect.bisect_left(values, lo)
+
+
+def _cave_candidates(data: bytes | bytearray, min_size: int) -> list[dict]:
+    sections, code_raw, code_rsize, code_rva = _code_section(data)
+    targets, ptrs = _reference_sets(data, code_raw, code_rsize, code_rva)
+    candidates = []
+    for m in re.finditer(
+        b"\xcc{%d,}" % min_size, data[code_raw : code_raw + code_rsize]
+    ):
+        start = code_raw + m.start()
+        stop = code_raw + m.end()
+        length = stop - start
+        section, flags = _section_for(sections, start)
+        executable = bool(flags & IMAGE_SCN_MEM_EXECUTE)
+        before = data[start - 1] if start else 0
+        after = data[stop] if stop < len(data) else 0
+        va = IMAGE_BASE + code_rva + (start - code_raw)
+        prefix = min(CAVE_PREFIX, length)
+        prefix_refs = _count_between(targets, va, va + prefix) + _count_between(
+            ptrs, va, va + prefix
+        )
+        total_refs = _count_between(targets, va, va + length) + _count_between(
+            ptrs, va, va + length
+        )
+        boundary_ok = before in (0xC3, 0xC2)
+        candidates.append(
+            {
+                "start": start,
+                "length": length,
+                "section": section,
+                "exec": executable,
+                "before": before,
+                "after": after,
+                "prefix_refs": prefix_refs,
+                "total_refs": total_refs,
+                "boundary": boundary_ok,
+                "safe": executable and boundary_ok and prefix_refs == 0,
+            }
+        )
+    return candidates
+
+
+def _pick_caves(
+    data: bytes | bytearray,
+    min_size: int,
+    count: int,
+    exclude: tuple[int, int] | None,
+) -> list[dict]:
+    runs = _cave_candidates(data, min_size)
+    if exclude is not None:
+        runs = [
+            r
+            for r in runs
+            if r["start"] + r["length"] <= exclude[0] or r["start"] >= exclude[1]
+        ]
+    safe = [r for r in runs if r["safe"]]
+    safe.sort(key=lambda r: r["length"], reverse=True)
+    return safe[:count]
+
+
 def find_cc_cave(
     data: bytes | bytearray, min_size: int = 32, exclude: tuple[int, int] | None = None
 ) -> tuple[int, int] | None:
-    """Return (offset, length) of the largest CC-padded region in .rdata,
-    optionally ignoring the region exclude = (start, end)."""
-    rdata_end = RDATA_RAW + 0x03072A00
-    best: tuple[int, int] | None = None
-    i = RDATA_RAW
-    while i < rdata_end:
-        if data[i] == 0xCC:
-            j = i
-            while j < rdata_end and data[j] == 0xCC:
-                j += 1
-            length = j - i
-            outside = exclude is None or j <= exclude[0] or i >= exclude[1]
-            if outside and length >= min_size and (best is None or length > best[1]):
-                best = (i, length)
-            i = j
-        else:
-            i += 1
-    return best
+    """Return (offset, length) of the largest safe CC-padded region in .rdata."""
+    global LAST_CAVE_INFO
+    picked = _pick_caves(data, min_size, 1, exclude)
+    if not picked:
+        return None
+    LAST_CAVE_INFO = picked[0]
+    return picked[0]["start"], picked[0]["length"]
 
 
 def find_cc_caves(
@@ -203,16 +351,21 @@ def find_cc_caves(
     count: int,
     exclude: tuple[int, int] | None = None,
 ) -> list[tuple[int, int]]:
-    """Up to count CC-padded regions in .rdata of at least min_size bytes,
-    largest first, ignoring the region exclude = (start, end)."""
-    rdata_end = RDATA_RAW + 0x03072A00
-    found = []
-    for m in re.finditer(b"\xcc{%d,}" % min_size, data[RDATA_RAW:rdata_end]):
-        i, j = RDATA_RAW + m.start(), RDATA_RAW + m.end()
-        if exclude is None or j <= exclude[0] or i >= exclude[1]:
-            found.append((i, j - i))
-    found.sort(key=lambda c: -c[1])
-    return found[:count]
+    """Up to count CC-padded regions in .rdata, largest first.
+
+    Small side caves are used for self-contained thunks; length matters more
+    than the reference prefix, so safe runs only win ties.
+    """
+    runs = _cave_candidates(data, min_size)
+    if exclude is not None:
+        runs = [
+            r
+            for r in runs
+            if r["start"] + r["length"] <= exclude[0] or r["start"] >= exclude[1]
+        ]
+    runs = [r for r in runs if r["exec"]]
+    runs.sort(key=lambda r: (r["length"], r["safe"]), reverse=True)
+    return [(r["start"], r["length"]) for r in runs[:count]]
 
 
 def locate_game_dir(hint: str | None = None) -> str | None:
@@ -593,11 +746,26 @@ def main() -> None:
     # ------------------------------------------------------------------
     # Find code cave (shared by all patches)
     # ------------------------------------------------------------------
-    cave = find_cc_cave(data, min_size=128)
+    try:
+        cave = find_cc_cave(data, min_size=128)
+    except RuntimeError as exc:
+        print(f"\n  ERROR: {exc}")
+        sys.exit(1)
     if cave is None:
         print("\n  ERROR: no suitable CC cave found in .rdata.")
         sys.exit(1)
     cave_off, cave_len = cave
+    info = LAST_CAVE_INFO
+    if info is not None:
+        print(
+            f"  Cave check  : 0x{cave_off:08X}  len={cave_len}  "
+            f"section={info['section']}  exec={'yes' if info['exec'] else 'no'}  "
+            f"boundary={info['before']:02X}  "
+            f"refs(first {CAVE_PREFIX})={info['prefix_refs']}  "
+            f"refs(run)={info['total_refs']}"
+        )
+        if not info["safe"]:
+            print("  WARNING: cave safety checks did not all pass")
     next_cave_off = cave_off
     patch_num = 0
     enabled = [
