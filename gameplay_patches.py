@@ -179,11 +179,16 @@ def slack_caves(data: bytearray) -> list[list[int]]:
 
 
 def put_code(data: bytearray, caves: list[list[int]], build) -> int:
-    """Place the code from build(Asm) in the first cave it fits; returns its VA."""
+    """Place the code from build(Asm) in the first cave it fits; returns its VA.
+
+    Each entry is [file start, file end, va_delta], where va_delta is
+    (VA - file offset) for that section, not a displacement into the cave.
+    """
     for c in caves:
-        code = build(Asm(c[0] + c[2])).build()
+        va_delta = c[2]
+        dest = c[0] + va_delta
+        code = build(Asm(dest)).build()
         if c[0] + len(code) <= c[1]:
-            dest = c[0] + c[2]
             c[0] = _place(data, c[0], c[1], code, base_va=dest, check_refs=True)
             return dest
     raise RuntimeError("code cave too small")

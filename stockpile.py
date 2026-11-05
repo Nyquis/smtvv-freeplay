@@ -81,10 +81,37 @@ def battle_item_limits(uexp: bytes) -> dict[int, int]:
     return limits
 
 
+def _cave_va(c: list[int]) -> int:
+    """VA of a side-cave entry.
+
+    A two-element entry is [file start, file end]. A three-element entry adds
+    c[2] = VA - file offset for its section; it is not a displacement into the
+    cave.
+    """
+    return c[0] + c[2] if len(c) > 2 else va(c[0])
+
+
 def patch_stockpile(data: bytearray, cave_off: int, cave_end: int,
                      orig: dict[int, int], side: list[list[int]]) -> int | None:
+    """Transactional wrapper: a failed trial must not consume side-cave space."""
+    original = [c[0] for c in side]
+    try:
+        result = _patch_stockpile(data, cave_off, cave_end, orig, side)
+    except BaseException:
+        for c, start in zip(side, original):
+            c[0] = start
+        raise
+    if result is None:
+        for c, start in zip(side, original):
+            c[0] = start
+    return result
+
+
+def _patch_stockpile(data: bytearray, cave_off: int, cave_end: int,
+                     orig: dict[int, int], side: list[list[int]]) -> int | None:
     """Main code goes in the shared cave; the ItemGetMaxNum hooks go in the
-    smaller caves listed in side ([start, end] pairs, used up in place)."""
+    smaller caves listed in side ([start, end] or [start, end, va - file],
+    used up in place)."""
     for t in SETNEXTSTEP_THUNKS + MAX_THUNKS + [ITEM_GET_NUM, ITEM_GET_MAX]:
         if data[off(t)] != 0xE9:
             return None
@@ -154,7 +181,7 @@ def patch_stockpile(data: bytearray, cave_off: int, cave_end: int,
     max_orig = ITEM_GET_MAX + 5 + struct.unpack_from("<i", data, off(ITEM_GET_MAX) + 1)[0]
     def side_put(build) -> int:
         for c in side:
-            base = c[0] + c[2] if len(c) > 2 else va(c[0])
+            base = _cave_va(c)
             code = build(Asm(base)).build()
             if c[0] + len(code) <= c[1]:
                 c[0] = _place(data, c[0], c[1], code, base_va=base, check_refs=True)
