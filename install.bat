@@ -39,6 +39,7 @@ set "BOOL_KEYS=essences heal mimans miracles compendium jump magatsuhi intro mas
 set "STATE=!BINDIR!\Freeplay.features"
 for %%K in (%BOOL_KEYS%) do set "INST_%%K="
 set "INST_itemhacks="
+set "INST_magatsuhi_chain="
 set "INST_autosave="
 set "INST_haptics="
 set "INST_leylines="
@@ -51,6 +52,7 @@ if exist "!STATE!" (
         for %%K in (%BOOL_KEYS%) do if /i "%%A"=="%%K" if "%%B"=="1" set "INST_%%K=1"
         if /i "%%A"=="itemhacks" if /i "%%B"=="refill" set "INST_itemhacks=refill"
         if /i "%%A"=="itemhacks" if /i "%%B"=="stockpile" set "INST_itemhacks=stockpile"
+        if /i "%%A"=="magatsuhi_chain" if "%%B"=="1" set "INST_magatsuhi_chain=1"
         if /i "%%A"=="autosave" for /l %%N in (1,1,20) do if "%%B"=="%%N" set "INST_autosave=%%N"
         if /i "%%A"=="haptics" if "%%B"=="1" set "INST_haptics=1"
         if /i "%%A"=="leylines" if "%%B"=="1" set "INST_leylines=1"
@@ -134,7 +136,8 @@ call :ask compendium "Free Compendium (compendium summons cost nothing)"
 call :ask_items
 call :ask_warned jump "Superjump (hold jump to rise, faster air control)"
 call :ask_shop
-call :ask magatsuhi "Full Magatsuhi (gauge full at the start of every battle)"
+call :ask magatsuhi "Full Magatsuhi (gauge full at the start of battle)"
+if defined SEL_magatsuhi call :ask_magatsuhi_mode
 call :ask estoma "Free Estoma (barrier costs no Magatsuhi)"
 call :ask_warned intro "Skip Intro (no logos or opening movie; boot to title menu)"
 call :ask masakado "Masakado Unlock (powered-up Masakado fight without the Kiou Sword)"
@@ -151,6 +154,7 @@ for %%K in (%BOOL_KEYS%) do (
         set "FLAGS=!FLAGS! --no-%%K"
     )
 )
+if defined SEL_magatsuhi_chain set "FLAGS=!FLAGS! --magatsuhi-chain"
 if defined SEL_leylines (
     set /a NSEL+=1
     set "FLAGS=!FLAGS! --leylines"
@@ -210,6 +214,26 @@ if /i "!A!"=="y" (
 )
 if /i "!A!"=="n" exit /b 0
 goto :ask_again
+
+:: call :ask_magatsuhi_mode -- battle or chain refill when Magatsuhi is chosen
+:ask_magatsuhi_mode
+set "SEL_magatsuhi_chain="
+set "Q=   Refill [b] every battle or [c] once per chain? [b]: "
+set "DEF=b"
+if defined INST_magatsuhi_chain (
+    set "Q=   Refill [b] every battle or [c] once per chain [installed: chain] [c]: "
+    set "DEF=c"
+)
+:ask_magatsuhi_again
+set "A="
+set /p "A=!Q!"
+if not defined A set "A=!DEF!"
+if /i "!A!"=="b" exit /b 0
+if /i "!A!"=="c" (
+    set "SEL_magatsuhi_chain=1"
+    exit /b 0
+)
+goto :ask_magatsuhi_again
 
 :: call :ask_warned <key> "<description>" -- like :ask, with the mod's note
 :: shown before the question and again (with a pause) when it is chosen

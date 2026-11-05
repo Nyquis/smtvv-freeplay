@@ -96,7 +96,7 @@ import stockpile
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.11.7"
+MOD_VERSION = "5.12.0"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -835,6 +835,11 @@ def main() -> None:
         "--no-magatsuhi", action="store_true", help="Skip the Full Magatsuhi patch"
     )
     parser.add_argument(
+        "--magatsuhi-chain",
+        action="store_true",
+        help="Refill Magatsuhi once per chain instead of at every battle",
+    )
+    parser.add_argument(
         "--no-shop",
         action="store_true",
         help="Leave the shop stock and prices untouched",
@@ -1456,7 +1461,9 @@ def main() -> None:
     if do_magatsuhi:
         try:
             trial = bytearray(data)  # applied only if the whole patch fits
-            if not gameplay_patches.patch_magatsuhi(trial, slack):
+            if not gameplay_patches.patch_magatsuhi(
+                trial, slack, chain=args.magatsuhi_chain
+            ):
                 raise RuntimeError("AOB mismatch")
             data[:] = trial
             del trial
@@ -1715,6 +1722,8 @@ def main() -> None:
         "estoma": results.get("estoma", False),
     }
     lines = [f"{k}={int(v)}" for k, v in features.items()]
+    chain_fill = bool(results.get("magatsuhi")) and args.magatsuhi_chain
+    lines.append(f"magatsuhi_chain={int(chain_fill)}")
     lines.append(
         "itemhacks="
         + (

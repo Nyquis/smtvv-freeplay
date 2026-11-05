@@ -53,6 +53,13 @@ def test_installers_verify_before_applying():
         assert "--check" in text
 
 
+def test_installers_offer_the_magatsuhi_modes():
+    bat, sh = _read(BAT), _read(SH)
+    for text in (bat, sh):
+        assert "--magatsuhi-chain" in text
+        assert "magatsuhi_chain" in text
+
+
 def test_installers_offer_leylines():
     bat, sh = _read(BAT), _read(SH)
     for text in (bat, sh):

@@ -280,14 +280,32 @@ def patch_refill(data: bytearray, cave_off: int, cave_end: int) -> int | None:
 # array, one per side, the player's first (the party Uplifting gauge from the
 # save data is copied in before the first step, and the array is written
 # back when the battle ends). The maximum is BPL_BattleCommon:
-# GetUpliftingGaugeMax, a constant 100. The player's gauge is filled on the
-# opening steps (READY .. START_EVENT), which run once per battle.
+# GetUpliftingGaugeMax, a constant 100.
+#
+# The player's gauge is filled on the opening steps (READY .. START_EVENT).
+#
+# Two modes:
+#   battle (default) fills at the start of every battle, including each Boss
+#     Rush or chain encounter, which reuses the same BattleMainWorkBase. The
+#     game copies the party gauge over the battle gauge during a chain
+#     hand-off and the meter only redraws on the first action, so the gauge is
+#     full from the start of the round while the meter catches up one action
+#     later.
+#   chain fills only for the first battle of a chain. Rounds reuse the same
+#     battle actor and gauge array, so that pair identifies the chain; a new
+#     battle (a new actor, normally with a new array) fills again.
 BTL_GAUGES_OFF = 0x540  # TArray<int32> {data, num, max}
 BTL_GAUGE_CACHE = 0x550  # player's gauge, refreshed from the array
+# Scratch in the writable .xpdata page, after Stockpile's table
+# (0x1549A9900..0x1549A9997). Never written to the game files.
+MAGATSUHI_ACTOR = 0x1549A99A0
+MAGATSUHI_ARRAY = 0x1549A99A8
 UPLIFT_MAX = 100
 
 
-def patch_magatsuhi(data: bytearray, caves: list[list[int]]) -> bool:
+def patch_magatsuhi(
+    data: bytearray, caves: list[list[int]], chain: bool = False
+) -> bool:
     for t in SETNEXTSTEP_THUNKS:
         current = data[off(t) : off(t) + 5]
         # Refill or Stockpile may already have redirected this thunk.
@@ -302,7 +320,7 @@ def patch_magatsuhi(data: bytearray, caves: list[list[int]]) -> bool:
     for t in SETNEXTSTEP_THUNKS:
         prev = t + 5 + struct.unpack_from("<i", data, off(t) + 1)[0]
 
-        def hook(a, prev=prev):
+        def hook(a, prev=prev, chain=chain):
             a.raw("53 48 83 EC 20 48 89 CB")  # push rbx; sub rsp,20h; mov rbx,rcx
             a.call(prev)
             a.raw("0F B6 83" + u32(BTL_NEXTSTEP_OFF))  # movzx eax, byte [rbx+262h]
@@ -310,12 +328,22 @@ def patch_magatsuhi(data: bytearray, caves: list[list[int]]) -> bool:
                 f"83 E8 {BTL_STEP_READY:02x} 83 F8 {BTL_STEP_START_EVENT - BTL_STEP_READY:02x}"
             )
             a.ja("done")  # opening steps only
-            a.raw("48 8B 83" + u32(BTL_GAUGES_OFF))  # mov rax, [rbx+540h]
-            a.raw("48 85 C0").je("done")
+            a.raw("48 8B 93" + u32(BTL_GAUGES_OFF))  # mov rdx, [rbx+540h]
+            a.raw("48 85 D2").je("done")
+            if chain:
+                # A chain reuses the battle actor and its gauge array.
+                a._rel("48 39 1D", MAGATSUHI_ACTOR)  # cmp [actor], rbx
+                a.jne("fill")
+                a._rel("48 39 15", MAGATSUHI_ARRAY)  # cmp [array], rdx
+                a.je("done")
+                a.label("fill")
             a.raw("83 BB" + u32(BTL_GAUGES_OFF + 8) + "00")  # cmp dword [rbx+548h], 0
             a.jle("done")
-            a.raw("C7 00" + u32(UPLIFT_MAX))  # mov dword [rax], 100
+            a.raw("C7 02" + u32(UPLIFT_MAX))  # mov dword [rdx], 100
             a.raw("C7 83" + u32(BTL_GAUGE_CACHE) + u32(UPLIFT_MAX))
+            if chain:
+                a._rel("48 89 1D", MAGATSUHI_ACTOR)  # mov [actor], rbx
+                a._rel("48 89 15", MAGATSUHI_ARRAY)  # mov [array], rdx
             a.label("done")
             a.raw("48 83 C4 20 5B C3")
             return a

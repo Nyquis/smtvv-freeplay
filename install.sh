@@ -15,7 +15,7 @@
 # Scripted use: patch flags skip the questions and are passed to the patcher
 # (every mod is installed unless switched off):
 #   --no-essences  --no-heal  --no-mimans  --no-miracles  --no-compendium
-#   --no-refill  --no-jump  --no-magatsuhi  --no-intro  --no-masakado
+#   --no-refill  --no-jump  --no-magatsuhi  --magatsuhi-chain  --no-intro  --no-masakado
 #   --no-newborn  --no-shop
 #   --shop-consumables default|free|immediate   (same for growth, essences, misc)
 #   --stockpile    (Stockpile instead of Battle Refill)
@@ -132,7 +132,7 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
         [miracles]="NG+ Miracles (unlock NG+ miracles early)"
         [compendium]="Free Compendium (compendium summons cost nothing)"
         [jump]="Superjump (hold jump to rise, faster air control)"
-        [magatsuhi]="Full Magatsuhi (gauge full at the start of every battle)"
+        [magatsuhi]="Full Magatsuhi (gauge full at the start of battle)"
         [estoma]="Free Estoma (barrier costs no Magatsuhi)"
         [intro]="Skip Intro (no logos or opening movie; boot to title menu)"
         [masakado]="Masakado Unlock (powered-up Masakado fight without the Kiou Sword)"
@@ -142,12 +142,14 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
     declare -A INST_SHOP=()
     declare -A SEL_SHOP=()
     INST_ITEMS=""
+    INST_MAGATSUHI_CHAIN=""
     INST_AUTOSAVE=""
     if [ -f "$STATE" ]; then
         while IFS='=' read -r k v; do
             k="${k%$'\r'}"; v="${v%$'\r'}"
             case "$k" in
                 itemhacks) case "$v" in refill|stockpile) INST_ITEMS="$v" ;; esac ;;
+                magatsuhi_chain) [ "$v" = "1" ] && INST_MAGATSUHI_CHAIN=1 ;;
                 autosave) [[ "$v" =~ ^([1-9]|1[0-9]|20)$ ]] && INST_AUTOSAVE="$v" ;;
                 leylines) [ "$v" = "1" ] && INST[leylines]=1 ;;
                 shop) [ "$v" = "1" ] && INST_SHOP[growth]=immediate ;;
@@ -277,6 +279,23 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
         done
     }
 
+    ask_magatsuhi_mode() {
+        local q def A
+        if [ -n "$INST_MAGATSUHI_CHAIN" ]; then
+            q="Refill once per chain instead of every battle? [Y/n]: "; def=y
+        else
+            q="Refill once per chain instead of every battle? [y/N]: "; def=n
+        fi
+        while true; do
+            read -r -p "  $q" A
+            A="${A:-$def}"
+            case "$A" in
+                [yY]) SEL_MAGATSUHI_CHAIN=1; return ;;
+                [nN]) return ;;
+            esac
+        done
+    }
+
     ask_shop() {
         local spec cat label cur A
         echo "  Shop stock - choose a mode per category:"
@@ -307,7 +326,9 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
     ask_items
     ask_warned jump
     ask_shop
-    for k in magatsuhi estoma; do ask "$k"; done
+    ask magatsuhi
+    if [ -n "${SEL[magatsuhi]:-}" ]; then ask_magatsuhi_mode; fi
+    ask estoma
     ask_warned intro
     for k in masakado newborn; do ask "$k"; done
     ask_autosave
@@ -316,6 +337,9 @@ if [ ${#PATCH_FLAGS[@]} -eq 0 ]; then
     for k in "${BOOL_KEYS[@]}"; do
         if [ -n "${SEL[$k]:-}" ]; then NSEL=$((NSEL + 1)); else PATCH_FLAGS+=("--no-$k"); fi
     done
+    if [ -n "${SEL_MAGATSUHI_CHAIN:-}" ]; then
+        PATCH_FLAGS+=("--magatsuhi-chain")
+    fi
     if [ -n "${SEL[leylines]:-}" ]; then
         NSEL=$((NSEL + 1)); PATCH_FLAGS+=("--leylines")
     fi

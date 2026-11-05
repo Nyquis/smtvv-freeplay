@@ -2,7 +2,7 @@
 
 Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
 
-**Current version: 5.11.7**
+**Current version: 5.12.0**
 
 ## Features
 
@@ -40,8 +40,9 @@ Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
    misc) whether stock is free and whether it appears immediately. The growth
    category covers Gospels, Grimoires, Sutras, Balms and Incenses.
 
-9. **Full Magatsuhi** - every battle starts with a full Magatsuhi gauge.
-   Magatsuhi gain during battle is unchanged.
+9. **Full Magatsuhi** - battles start with a full Magatsuhi gauge: either
+   every battle (default) or once per chain. Magatsuhi gain during battle is
+   unchanged.
 
 10. **Skip Intro** - no logo or warning screens, no opening movie and no
     "press any button" screen: after a few seconds of black screen the game
@@ -181,6 +182,7 @@ Optional patch flags:
 --shop-essences {default,free,immediate}
 --shop-misc {default,free,immediate}
 --no-magatsuhi
+--magatsuhi-chain
 --no-estoma
 --no-intro
 --no-masakado
@@ -301,6 +303,15 @@ Uses the same `SetNextStep` hook as Battle Refill (below). A battle keeps
 its own Magatsuhi gauge for each side, copied from the party's gauge as it
 starts and written back as it ends. On the battle's opening steps the
 player's gauge is set to its maximum of 100.
+
+Two refill modes are available when installing:
+
+- **Every battle** (default) fills the gauge at the start of every battle,
+  including every Boss Rush or chain encounter. Those rounds reuse the same
+  battle object; the gauge is full from the start of the round, but the meter
+  only redraws on your first action, so it can briefly look unchanged.
+- **Once per chain** fills only the first battle of a chain. Later rounds keep
+  whatever gauge is left, which matches what the meter shows.
 
 ### Free Estoma
 

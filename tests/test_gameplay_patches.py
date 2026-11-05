@@ -57,6 +57,40 @@ def test_magatsuhi_guard_refuses_unknown_layout():
     assert gp.patch_magatsuhi(data, [[0, 0]]) is False
 
 
+def _magatsuhi_blob():
+    data = bytearray(0xC30000)
+    thunk = gp.off(gp.SETNEXTSTEP_THUNKS[0])
+    data[thunk : thunk + 5] = gp.SETNEXTSTEP_ORIG
+    data[:0x800] = b"\xcc" * 0x800
+    caves = [[0, 0x800, gp.RDATA_VA - gp.RDATA_RAW]]
+    return data, caves, gp.va(0)
+
+
+def test_magatsuhi_chain_mode_stores_the_actor_and_gauge_array():
+    data, caves, base = _magatsuhi_blob()
+    assert gp.patch_magatsuhi(data, caves, chain=True) is True
+    code = bytes(data[:0x800])
+    targets = set()
+    for pos in range(len(code) - 7):
+        for lead in (
+            b"\x48\x39\x1d",
+            b"\x48\x39\x15",
+            b"\x48\x89\x1d",
+            b"\x48\x89\x15",
+        ):
+            if code.startswith(lead, pos):
+                disp = struct.unpack_from("<i", code, pos + 3)[0]
+                targets.add(base + pos + 7 + disp)
+    assert targets == {gp.MAGATSUHI_ACTOR, gp.MAGATSUHI_ARRAY}
+
+
+def test_magatsuhi_battle_mode_has_no_chain_check():
+    data, caves, _base = _magatsuhi_blob()
+    assert gp.patch_magatsuhi(data, caves) is True
+    code = bytes(data[:0x800])
+    assert not any(lead in code for lead in (b"\x48\x39\x1d", b"\x48\x89\x1d"))
+
+
 def test_refill_guard_refuses_unknown_layout():
     data = bytearray(0xC30000)
     assert gp.patch_refill(data, 0, 0) is None
