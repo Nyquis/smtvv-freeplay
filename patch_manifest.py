@@ -133,13 +133,7 @@ def static_sites(data: bytes | bytearray) -> dict[str, list[tuple[int, int, byte
         offset = gp.off(thunk)
         for feature in ("refill", "stockpile", "magatsuhi", "autosave"):
             add(feature, offset, 5)
-    for function, original in (
-        (gp.ITEM_GET, gp.ITEM_GET_ORIG),
-        (gp.ITEM_GET_MAX, gp.ITEM_GET_MAX_ORIG),
-        (gp.ITEM_GET_NUM, gp.ITEM_GET_NUM_ORIG),
-        (gp.ITEM_IS_GOTTEN, gp.ITEM_IS_GOTTEN_ORIG),
-    ):
-        add("refill", gp.off(function), len(original))
+    # Only stockpile rewrites the item entry points; refill calls them as-is.
     for function, original in (
         (gp.ITEM_GET_MAX, gp.ITEM_GET_MAX_ORIG),
         (gp.ITEM_GET_NUM, gp.ITEM_GET_NUM_ORIG),

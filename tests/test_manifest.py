@@ -197,3 +197,17 @@ def test_relocate_reports_an_ambiguous_site(synthetic_layout):
 
     assert any("autosave.field_tick" in note for note in notes)
     assert autosave.FIELD_TICK_SITE == known
+
+
+def test_verification_groups_match_the_sites_each_feature_patches():
+    import gameplay_patches as gp
+
+    sites = patch_manifest.static_sites(bytearray(0x1800))
+
+    assert {offset for offset, _len, _orig in sites["refill"]} == {
+        gp.off(thunk) for thunk in gp.SETNEXTSTEP_THUNKS
+    }
+    stockpile_offsets = {offset for offset, _len, _orig in sites["stockpile"]}
+    assert gp.off(gp.ITEM_GET_MAX) in stockpile_offsets
+    assert gp.off(gp.ITEM_GET_NUM) in stockpile_offsets
+    assert gp.off(gp.ITEM_GET) not in stockpile_offsets
