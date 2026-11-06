@@ -2,7 +2,7 @@
 
 Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
 
-**Current version: 5.16.0**
+**Current version: 5.16.1**
 
 ## Features
 

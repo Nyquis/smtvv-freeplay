@@ -361,3 +361,25 @@ def test_install_frame_fits_80x24(monkeypatch, tmp_path):
     )
     lines = _last_frame(sys.stdout.getvalue())
     assert len(lines) <= 24
+
+
+def test_interactive_wrapper_restores_the_terminal(monkeypatch, tmp_path):
+    calls = []
+    console = _console(monkeypatch)
+    console.enter_fullscreen = lambda: calls.append("enter")
+    console.leave_fullscreen = lambda: calls.append("leave")
+    monkeypatch.setattr(entry, "_interactive_flow", lambda *_args: 0)
+    assert entry.run_interactive(None, console) == 0
+    assert calls == ["enter", "leave"]
+
+
+def test_failure_log_is_written(monkeypatch, tmp_path):
+    console = _console(monkeypatch)
+    monkeypatch.setattr(entry, "LAST_LOG", ["line one", "line two"])
+    monkeypatch.setattr(entry.tempfile, "gettempdir", lambda: str(tmp_path))
+    console.write = lambda *_args: None
+    monkeypatch.setattr(entry, "_interactive_flow", lambda *_args: 1)
+    assert entry.run_interactive(None, console) == 1
+    log = tmp_path / "freeplay-installer.log"
+    assert log.is_file()
+    assert "line two" in log.read_text(encoding="utf-8")

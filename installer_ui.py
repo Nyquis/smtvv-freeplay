@@ -59,6 +59,7 @@ class Console:
     def __init__(self) -> None:
         self.tty = sys.stdin.isatty() and sys.stdout.isatty()
         self.ansi = self.tty and _enable_windows_vt()
+        self.alt_screen = self.ansi
         self.color = self.ansi and not os.environ.get("NO_COLOR")
         self.unicode = self.ansi and _unicode_ok()
 
@@ -115,12 +116,25 @@ class Console:
 
     def clear(self) -> None:
         if self.ansi:
-            sys.stdout.write("\x1b[2J\x1b[H")
+            sys.stdout.write("\x1b[H\x1b[2J")
             sys.stdout.flush()
         elif self.tty:
             os.system("cls" if os.name == "nt" else "clear")
         else:
             self.write()
+
+    def enter_fullscreen(self) -> None:
+        """Use the alternate screen when the terminal supports it."""
+        if not self.alt_screen:
+            return
+        sys.stdout.write("\x1b[?1049h\x1b[H\x1b[2J")
+        sys.stdout.flush()
+
+    def leave_fullscreen(self) -> None:
+        if not self.alt_screen:
+            return
+        sys.stdout.write("\x1b[?1049l")
+        sys.stdout.flush()
 
 
 def _visible(text: str) -> int:
@@ -193,15 +207,24 @@ class Screen:
     def __init__(self, console: Console) -> None:
         self.console = console
         self.lines = 0
+        self.size: tuple[int, int] | None = None
 
     def begin(self) -> None:
         self.lines = 0
+        self.size = self.console.size()
         if self.console.ansi:
             self.console.clear()
             sys.stdout.write("\x1b[?25l")
             sys.stdout.flush()
 
     def draw(self, lines: list[str]) -> None:
+        size = self.console.size()
+        if self.size is None:
+            self.size = size
+        elif size != self.size:
+            self.console.clear()
+            self.lines = 0
+            self.size = size
         width = self.console.width()
         lines = [_fit(line, width) for line in lines]
         if not self.console.tty:

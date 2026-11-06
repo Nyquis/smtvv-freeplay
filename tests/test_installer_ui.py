@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import sys
 
 import installer_ui as ui
@@ -118,3 +119,41 @@ def test_vt_falls_back_when_ctypes_is_missing(monkeypatch):
     assert ui._enable_windows_vt() is False
     monkeypatch.setattr(ui, "_windows_terminal_hint", lambda: True)
     assert ui._enable_windows_vt() is True
+
+
+def test_enter_and_leave_fullscreen_emit_the_sequences(monkeypatch):
+    console = _plain_console()
+    console.ansi = True
+    console.alt_screen = True
+    out = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", out)
+    console.enter_fullscreen()
+    console.leave_fullscreen()
+    text = out.getvalue()
+    assert "\x1b[?1049h" in text
+    assert "\x1b[?1049l" in text
+
+
+def test_fullscreen_is_a_noop_without_vt(monkeypatch):
+    console = _plain_console()
+    console.alt_screen = False
+    out = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", out)
+    console.enter_fullscreen()
+    console.leave_fullscreen()
+    assert out.getvalue() == ""
+
+
+def test_screen_clears_when_the_terminal_resizes(monkeypatch):
+    console = _plain_console()
+    console.ansi = True
+    sizes = iter([(80, 24), (80, 24), (100, 30)])
+    console.size = lambda: next(sizes)
+    cleared = []
+    console.clear = lambda: cleared.append("clear")
+    monkeypatch.setattr(sys, "stdout", io.StringIO())
+    screen = ui.Screen(console)
+    screen.begin()
+    screen.draw(["a"])
+    screen.draw(["b"])
+    assert cleared == ["clear", "clear"]

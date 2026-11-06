@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import queue
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,6 +21,7 @@ import installer_ui as ui
 HERE = Path(__file__).resolve().parent
 PATCH_SCRIPT = HERE / "patch_smtvv_freeplay.py"
 HAPTICS_SOURCE = HERE / "haptics"
+LAST_LOG: list[str] = []
 FLAGS_WITH_VALUE = (
     "--shop-consumables",
     "--shop-growth",
@@ -132,6 +134,7 @@ def run_patcher_steps(game: Path, flags: list[str], console: ui.Console) -> bool
             console.write(result.stderr.rstrip())
         console.write("")
         console.write(console.red("  Patch verification failed. Nothing was written."))
+        LAST_LOG[:] = (result.stdout or "").splitlines()
         return False
     console.write(console.green("  All selected patches verified."))
 
@@ -770,6 +773,7 @@ def _run_preflight(w: Wizard, flags: list[str]) -> tuple[bool, state.PatchRun]:
         _draw_preflight(w, run, tick, True, ok)
         if ok:
             return True, run
+        LAST_LOG[:] = run.log
         while True:
             size = w.console.size()
             _draw_preflight(w, run, tick, True, False)
@@ -905,6 +909,7 @@ def _run_install(
             _draw_install(w, stages, run, tick, "Patcher failed", False)
             w.screen.end()
             card_log = (preflight.log if preflight else []) + run.log
+            LAST_LOG[:] = card_log
             _await_card(w, "Installation failed", _failure_body(w, run), card_log)
             return {"ok": False}
         stages[1] = ("Applying patches", "done")
@@ -1039,7 +1044,8 @@ def restore_flow(w: Wizard) -> int:
     return 0
 
 
-def run_interactive(game_arg: str | None, console: ui.Console) -> int:
+def _interactive_flow(game_arg: str | None, console: ui.Console) -> int:
+    LAST_LOG.clear()
     version = state.mod_version(PATCH_SCRIPT)
     console.clear()
     banner(console, version)
@@ -1141,6 +1147,34 @@ def run_interactive(game_arg: str | None, console: ui.Console) -> int:
         return 1
     summary = _run_install(w, features.get("haptics") == "1", preflight_run)
     return 0 if summary.get("ok") else 1
+
+
+def _write_log(lines: list[str]) -> Path | None:
+    path = Path(tempfile.gettempdir()) / "freeplay-installer.log"
+    try:
+        path.write_text(
+            "\n".join(lines) + "\n", encoding="utf-8", errors="replace"
+        )
+    except OSError:
+        return None
+    return path
+
+
+def run_interactive(game_arg: str | None, console: ui.Console) -> int:
+    console.enter_fullscreen()
+    try:
+        code = _interactive_flow(game_arg, console)
+    finally:
+        console.leave_fullscreen()
+    if code == 0:
+        console.write("  Freeplay installer finished.")
+    else:
+        console.write("  Freeplay installer stopped.")
+        if LAST_LOG:
+            path = _write_log(LAST_LOG)
+            if path:
+                console.write(f"  Full log: {path}")
+    return code
 
 
 def main(argv: list[str] | None = None) -> int:
