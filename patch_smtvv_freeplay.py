@@ -99,7 +99,7 @@ from patch_manifest import LEGACY_MAP_PAK, MIRACLE_PAK
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.16.6"
+MOD_VERSION = "5.16.7"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -1633,7 +1633,9 @@ def main() -> None:
         ):
             print(f"    {key:<14} {cave_budget[key]:>5} bytes")
         free = max(0, cave_off + cave_len - next_cave_off)
-        print(f"    {'free':<14} {free:>5} bytes")
+        print(f"    {'free':<14} {free:>5} bytes of {cave_len}")
+        if free < 32:
+            print("    WARNING: main code cave is nearly full; new hooks may not fit")
 
     failed_selected = [key for key in failed if selected.get(key)]
     if check:
