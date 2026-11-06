@@ -87,16 +87,18 @@ import estoma
 import gameplay_patches
 import leylines
 import newborn
+import patch_manifest
 import quest_pak
 import reveal
 import shop_pak
 import stockpile
+from patch_manifest import LEGACY_MAP_PAK, MIRACLE_PAK
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.16.3"
+MOD_VERSION = "5.16.4"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -107,8 +109,6 @@ EXE_SUBPATH = os.path.join("Project", "Binaries", "Win64", EXE_NAME)
 # tool, edited, and repacked as a small override pak.
 PAKS_SUBPATH = os.path.join("Project", "Content", "Paks")
 SOURCE_PAK = "pakchunk0-WindowsNoEditor.pak"
-LEGACY_MAP_PAK = "pakchunk95_FreeplayMap_P.pak"  # removed Timed Quest Markers
-MIRACLE_PAK = "pakchunk99_NGPlusMiracles_P.pak"
 GP_TABLE_ENTRY = (
     "Project/Content/Blueprints/Gamedata/BinTable/"
     "GodParameter/Table/GodParameterDataTable"
@@ -703,64 +703,12 @@ def _verification_sites(
     data: bytes | bytearray,
 ) -> dict[str, list[tuple[int, int, bytes]]]:
     """Original bytes at every site a feature is expected to change."""
-    sites: dict[str, list[tuple[int, int, bytes]]] = {}
-
-    def add(feature: str, offset: int, length: int) -> None:
-        sites.setdefault(feature, []).append(
-            (offset, length, bytes(data[offset : offset + length]))
-        )
-
-    add("essences", TRAMP_OFFSET, len(TRAMP_ORIG))
-    add("heal", RYUKETSU_TRAMP_OFFSET, len(RYUKETSU_TRAMP_ORIG))
-    add("mimans", MIMAN_POS_CHECK_OFFSET, len(MIMAN_POS_CHECK_ORIG))
-    add(
-        "leylines",
-        gameplay_patches.off(leylines.POI_VISIBLE_SITE),
-        len(leylines.POI_VISIBLE_ORIG),
-    )
-    add("miracles", MIRACLE_ADDED_TRAMP, len(MIRACLE_ADDED_ORIG))
-    add("miracles", MIRACLE_STATE_TRAMP, len(MIRACLE_STATE_ORIG))
-    add("miracles", MIRACLE_666_NOP_ADDR, 6)
-    add("compendium", DEVIL_COST_OFFSET, len(DEVIL_COST_ORIG))
-
-    for thunk in gameplay_patches.SETNEXTSTEP_THUNKS:
-        offset = gameplay_patches.off(thunk)
-        for feature in ("refill", "stockpile", "magatsuhi", "autosave"):
-            add(feature, offset, 5)
-    for fn, original in (
-        (gameplay_patches.ITEM_GET, gameplay_patches.ITEM_GET_ORIG),
-        (gameplay_patches.ITEM_GET_MAX, gameplay_patches.ITEM_GET_MAX_ORIG),
-        (gameplay_patches.ITEM_GET_NUM, gameplay_patches.ITEM_GET_NUM_ORIG),
-        (gameplay_patches.ITEM_IS_GOTTEN, gameplay_patches.ITEM_IS_GOTTEN_ORIG),
-    ):
-        add("refill", gameplay_patches.off(fn), len(original))
-    for fn, original in (
-        (gameplay_patches.ITEM_GET_MAX, gameplay_patches.ITEM_GET_MAX_ORIG),
-        (gameplay_patches.ITEM_GET_NUM, gameplay_patches.ITEM_GET_NUM_ORIG),
-    ):
-        add("stockpile", gameplay_patches.off(fn), len(original))
-    for thunk in stockpile.MAX_THUNKS:
-        add("stockpile", gameplay_patches.off(thunk), len(stockpile.MAX_THUNK_ORIG))
+    sites = patch_manifest.static_sites(data)
     for slot, _thunk in stockpile.MAX_SLOTS:
-        add("stockpile", stockpile._file_off(data, slot), 8)
-
-    for site, original in (
-        (gameplay_patches.JUMP_VCALL_SITE, gameplay_patches.JUMP_VCALL_ORIG),
-        (gameplay_patches.AIRSPEED_SITE, gameplay_patches.AIRSPEED_ORIG),
-        (gameplay_patches.INTERP_SITE, gameplay_patches.INTERP_ORIG),
-        (gameplay_patches.TURN_SITE, gameplay_patches.TURN_ORIG),
-        (gameplay_patches.ARC_SITE, gameplay_patches.ARC_ORIG),
-    ):
-        add("jump", gameplay_patches.off(site), len(original))
-
-    add(
-        "intro",
-        gameplay_patches.off(gameplay_patches.TITLE_TICK_IMPL),
-        len(gameplay_patches.TITLE_TICK_ORIG),
-    )
-    add("newborn", gameplay_patches.off(newborn.RENEWAL_JMP), 5)
-    add("autosave", gameplay_patches.off(autosave.FIELD_TICK_SITE), 5)
-    add("autosave", gameplay_patches.off(autosave.SAVE_BUILD_SITE), 5)
+        offset = stockpile._file_off(data, slot)
+        sites.setdefault("stockpile", []).append(
+            (offset, 8, bytes(data[offset : offset + 8]))
+        )
     return sites
 
 
@@ -780,16 +728,7 @@ def _verify_patched(
         for offset, length, original in entries:
             if patched[offset : offset + length] == original:
                 failures.append(f"{feature}: site 0x{offset:08X} was not changed")
-    for feature, pak in (
-        ("miracles", MIRACLE_PAK),
-        ("stockpile", stockpile.STOCK_PAK),
-        ("shop", shop_pak.SHOP_PAK),
-        ("intro", boot_pak.BOOT_PAK),
-        ("masakado", quest_pak.QUEST_PAK),
-        ("newborn", newborn.NEWBORN_PAK),
-        ("estoma", estoma.ESTOMA_PAK),
-        ("reveal", reveal.REVEAL_PAK),
-    ):
+    for feature, pak in patch_manifest.FEATURE_PAKS:
         if results.get(feature):
             pak_path = os.path.join(game_dir, PAKS_SUBPATH, pak)
             if not os.path.isfile(pak_path):

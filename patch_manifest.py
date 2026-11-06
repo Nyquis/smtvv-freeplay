@@ -1,0 +1,109 @@
+"""Central table of patch verification sites and feature data paks.
+
+The patcher uses this after writing the executable: every entry here is
+re-read and must differ from its original bytes. Feature keys match the
+installer's catalogue and the feature record.
+"""
+
+from __future__ import annotations
+
+import autosave
+import boot_pak
+import estoma
+import gameplay_patches as gp
+import leylines
+import newborn
+import quest_pak
+import reveal
+import shop_pak
+import stockpile
+
+MIRACLE_PAK = "pakchunk99_NGPlusMiracles_P.pak"
+LEGACY_MAP_PAK = "pakchunk95_FreeplayMap_P.pak"  # removed Timed Quest Markers
+
+# (feature key, data pak) written by the patcher when the feature is enabled.
+FEATURE_PAKS = (
+    ("miracles", MIRACLE_PAK),
+    ("stockpile", stockpile.STOCK_PAK),
+    ("shop", shop_pak.SHOP_PAK),
+    ("intro", boot_pak.BOOT_PAK),
+    ("masakado", quest_pak.QUEST_PAK),
+    ("newborn", newborn.NEWBORN_PAK),
+    ("estoma", estoma.ESTOMA_PAK),
+    ("reveal", reveal.REVEAL_PAK),
+)
+
+STATIC_FEATURES = (
+    "essences",
+    "heal",
+    "mimans",
+    "leylines",
+    "miracles",
+    "compendium",
+    "refill",
+    "stockpile",
+    "jump",
+    "magatsuhi",
+    "intro",
+    "newborn",
+    "autosave",
+)
+
+
+def static_sites(data: bytes | bytearray) -> dict[str, list[tuple[int, int, bytes]]]:
+    """(offset, length, original) for every site except the dynamic slots."""
+    import patch_smtvv_freeplay as patcher
+
+    sites: dict[str, list[tuple[int, int, bytes]]] = {}
+
+    def add(feature: str, offset: int, length: int) -> None:
+        sites.setdefault(feature, []).append(
+            (offset, length, bytes(data[offset : offset + length]))
+        )
+
+    add("essences", patcher.TRAMP_OFFSET, len(patcher.TRAMP_ORIG))
+    add("heal", patcher.RYUKETSU_TRAMP_OFFSET, len(patcher.RYUKETSU_TRAMP_ORIG))
+    add("mimans", patcher.MIMAN_POS_CHECK_OFFSET, len(patcher.MIMAN_POS_CHECK_ORIG))
+    add(
+        "leylines",
+        gp.off(leylines.POI_VISIBLE_SITE),
+        len(leylines.POI_VISIBLE_ORIG),
+    )
+    add("miracles", patcher.MIRACLE_ADDED_TRAMP, len(patcher.MIRACLE_ADDED_ORIG))
+    add("miracles", patcher.MIRACLE_STATE_TRAMP, len(patcher.MIRACLE_STATE_ORIG))
+    add("miracles", patcher.MIRACLE_666_NOP_ADDR, 6)
+    add("compendium", patcher.DEVIL_COST_OFFSET, len(patcher.DEVIL_COST_ORIG))
+
+    for thunk in gp.SETNEXTSTEP_THUNKS:
+        offset = gp.off(thunk)
+        for feature in ("refill", "stockpile", "magatsuhi", "autosave"):
+            add(feature, offset, 5)
+    for function, original in (
+        (gp.ITEM_GET, gp.ITEM_GET_ORIG),
+        (gp.ITEM_GET_MAX, gp.ITEM_GET_MAX_ORIG),
+        (gp.ITEM_GET_NUM, gp.ITEM_GET_NUM_ORIG),
+        (gp.ITEM_IS_GOTTEN, gp.ITEM_IS_GOTTEN_ORIG),
+    ):
+        add("refill", gp.off(function), len(original))
+    for function, original in (
+        (gp.ITEM_GET_MAX, gp.ITEM_GET_MAX_ORIG),
+        (gp.ITEM_GET_NUM, gp.ITEM_GET_NUM_ORIG),
+    ):
+        add("stockpile", gp.off(function), len(original))
+    for thunk in stockpile.MAX_THUNKS:
+        add("stockpile", gp.off(thunk), len(stockpile.MAX_THUNK_ORIG))
+
+    for site, original in (
+        (gp.JUMP_VCALL_SITE, gp.JUMP_VCALL_ORIG),
+        (gp.AIRSPEED_SITE, gp.AIRSPEED_ORIG),
+        (gp.INTERP_SITE, gp.INTERP_ORIG),
+        (gp.TURN_SITE, gp.TURN_ORIG),
+        (gp.ARC_SITE, gp.ARC_ORIG),
+    ):
+        add("jump", gp.off(site), len(original))
+
+    add("intro", gp.off(gp.TITLE_TICK_IMPL), len(gp.TITLE_TICK_ORIG))
+    add("newborn", gp.off(newborn.RENEWAL_JMP), 5)
+    add("autosave", gp.off(autosave.FIELD_TICK_SITE), 5)
+    add("autosave", gp.off(autosave.SAVE_BUILD_SITE), 5)
+    return sites
