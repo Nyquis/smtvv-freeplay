@@ -99,7 +99,7 @@ from patch_manifest import LEGACY_MAP_PAK, MIRACLE_PAK
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.18.0"
+MOD_VERSION = "5.18.1"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -1516,14 +1516,21 @@ def main() -> None:
         except RuntimeError as exc:
             print(f"    WARNING: intro data pak not built - {exc}")
             fail("intro")
-        start = next_cave_off
-        result = gameplay_patches.patch_refocus(data, next_cave_off, cave_end)
-        if result is None:
+        main_cave = [
+            next_cave_off,
+            cave_end,
+            gameplay_patches.RDATA_VA - gameplay_patches.RDATA_RAW,
+        ]
+        dest = gameplay_patches.patch_refocus(data, list(slack or []) + [main_cave])
+        if dest is None:
             print("    WARNING: title refocus AOB mismatch - skipping")
             fail("intro")
         else:
-            next_cave_off = result
-            print(f"    Code cave     : 0x{start:08X}  ({next_cave_off - start} bytes)")
+            next_cave_off = main_cave[0]
+            print(
+                f"    Code cave     : 0x{dest:08X}  "
+                f"(main cave free {cave_end - next_cave_off} bytes)"
+            )
             if intro_pak_ok:
                 ok("intro")
             else:
