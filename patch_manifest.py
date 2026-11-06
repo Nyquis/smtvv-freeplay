@@ -148,16 +148,22 @@ def static_sites(data: bytes | bytearray) -> dict[str, list[tuple[int, int, byte
     for thunk in stockpile.MAX_THUNKS:
         add("stockpile", gp.off(thunk), len(stockpile.MAX_THUNK_ORIG))
 
-    for site, original in (
-        (gp.JUMP_VCALL_SITE, gp.JUMP_VCALL_ORIG),
-        (gp.AIRSPEED_SITE, gp.AIRSPEED_ORIG),
-        (gp.INTERP_SITE, gp.INTERP_ORIG),
-        (gp.TURN_SITE, gp.TURN_ORIG),
-        (gp.ARC_SITE, gp.ARC_ORIG),
-    ):
-        add("jump", gp.off(site), len(original))
+    for site, original in gp.JUMP_SITES:
+        resolved = signatures.resolve(data, gp.off(site), original)
+        add(
+            "jump",
+            resolved if resolved is not None else gp.off(site),
+            len(original),
+        )
 
-    add("intro", gp.off(gp.TITLE_TICK_IMPL), len(gp.TITLE_TICK_ORIG))
+    intro_offset = signatures.resolve(
+        data, gp.off(gp.TITLE_TICK_IMPL), gp.TITLE_TICK_ORIG
+    )
+    add(
+        "intro",
+        intro_offset if intro_offset is not None else gp.off(gp.TITLE_TICK_IMPL),
+        len(gp.TITLE_TICK_ORIG),
+    )
     add("newborn", gp.off(newborn.RENEWAL_JMP), 5)
     add("autosave", gp.off(autosave.FIELD_TICK_SITE), 5)
     add("autosave", gp.off(autosave.SAVE_BUILD_SITE), 5)

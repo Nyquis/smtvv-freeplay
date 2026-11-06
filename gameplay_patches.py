@@ -432,16 +432,24 @@ AIR_INTERP_MUL = 8.0
 AIR_TURN_MUL = 8.0
 
 
+JUMP_SITES = (
+    (JUMP_VCALL_SITE, JUMP_VCALL_ORIG),
+    (AIRSPEED_SITE, AIRSPEED_ORIG),
+    (INTERP_SITE, INTERP_ORIG),
+    (TURN_SITE, TURN_ORIG),
+    (ARC_SITE, ARC_ORIG),
+)
+
+
 def patch_jump(data: bytearray, cave_off: int, cave_end: int) -> int | None:
-    for site, orig in (
-        (JUMP_VCALL_SITE, JUMP_VCALL_ORIG),
-        (AIRSPEED_SITE, AIRSPEED_ORIG),
-        (INTERP_SITE, INTERP_ORIG),
-        (TURN_SITE, TURN_ORIG),
-        (ARC_SITE, ARC_ORIG),
-    ):
-        if bytes(data[off(site) : off(site) + len(orig)]) != orig:
+    import signatures
+
+    site_va: dict[int, int] = {}
+    for site, orig in JUMP_SITES:
+        offset = signatures.resolve(data, off(site), orig)
+        if offset is None:
             return None
+        site_va[site] = va(offset)
 
     def u32(v):
         return struct.pack("<I", v).hex()
@@ -467,7 +475,7 @@ def patch_jump(data: bytearray, cave_off: int, cave_end: int) -> int | None:
     a.raw("C3")
     dest = va(cave_off)
     cave_off = _place(data, cave_off, cave_end, a.build())
-    _jmp_site(data, JUMP_VCALL_SITE, dest, 6, opcode=0xE8)
+    _jmp_site(data, site_va[JUMP_VCALL_SITE], dest, 6, opcode=0xE8)
 
     # Rising arc tick: while jump (Space, or pad A/B) is held in the focused
     # game window, keep the arc time at HOLD_ARC_TIME so the climb continues.
@@ -500,43 +508,43 @@ def patch_jump(data: bytearray, cave_off: int, cave_end: int) -> int | None:
     a.raw("48 81 C4 A8000000")
     a.raw("415B 415A 4159 4158 5A 59 58")
     a.raw(ARC_ORIG.hex())
-    a.jmp(ARC_SITE + 8)
+    a.jmp(site_va[ARC_SITE] + 8)
     a.f32("t", HOLD_ARC_TIME)
     dest = va(cave_off)
     cave_off = _place(data, cave_off, cave_end, a.build())
-    _jmp_site(data, ARC_SITE, dest, 8)
+    _jmp_site(data, site_va[ARC_SITE], dest, 8)
 
     # Airborne max speed x1.5 (this branch only runs off the ground).
     a = Asm(va(cave_off))
     a.raw(AIRSPEED_ORIG.hex())
     a.rip("F3 0F 59 05", "k")
-    a.jmp(AIRSPEED_SITE + 8)
+    a.jmp(site_va[AIRSPEED_SITE] + 8)
     a.f32("k", AIR_SPEED_MUL)
     dest = va(cave_off)
     cave_off = _place(data, cave_off, cave_end, a.build())
-    _jmp_site(data, AIRSPEED_SITE, dest, 8)
+    _jmp_site(data, site_va[AIRSPEED_SITE], dest, 8)
 
     # Input direction follows the stick much faster in the air.
     a = Asm(va(cave_off))
     a.raw(INTERP_ORIG.hex())
     a.raw("80 BF" + u32(PM_ON_GROUND) + "00").jne("back")
     a.rip("F3 0F 59 05", "k")
-    a.label("back").jmp(INTERP_SITE + 8)
+    a.label("back").jmp(site_va[INTERP_SITE] + 8)
     a.f32("k", AIR_INTERP_MUL)
     dest = va(cave_off)
     cave_off = _place(data, cave_off, cave_end, a.build())
-    _jmp_site(data, INTERP_SITE, dest, 8)
+    _jmp_site(data, site_va[INTERP_SITE], dest, 8)
 
     # Turn rate: undo the airborne rotation damping.
     a = Asm(va(cave_off))
     a.raw(TURN_ORIG.hex())
     a.raw("80 BF" + u32(PM_ON_GROUND) + "00").jne("back")
     a.rip("F3 0F 59 05", "k")
-    a.label("back").jmp(TURN_SITE + 8)
+    a.label("back").jmp(site_va[TURN_SITE] + 8)
     a.f32("k", AIR_TURN_MUL)
     dest = va(cave_off)
     cave_off = _place(data, cave_off, cave_end, a.build())
-    _jmp_site(data, TURN_SITE, dest, 8)
+    _jmp_site(data, site_va[TURN_SITE], dest, 8)
     return cave_off
 
 
@@ -560,8 +568,12 @@ REFOCUS_GAP_MS = 250
 
 
 def patch_refocus(data: bytearray, caves: list[list[int]]) -> int | None:
-    if bytes(data[off(TITLE_TICK_IMPL) : off(TITLE_TICK_IMPL) + 8]) != TITLE_TICK_ORIG:
+    import signatures
+
+    site = signatures.resolve(data, off(TITLE_TICK_IMPL), TITLE_TICK_ORIG)
+    if site is None:
         return None
+    site_va = va(site)
 
     def u32(v):
         return struct.pack("<I", v).hex()
@@ -599,5 +611,5 @@ def patch_refocus(data: bytearray, caves: list[list[int]]) -> int | None:
         return a
 
     dest = put_code(data, caves, build)
-    _jmp_site(data, TITLE_TICK_IMPL, dest, 8)
+    _jmp_site(data, site_va, dest, 8)
     return dest

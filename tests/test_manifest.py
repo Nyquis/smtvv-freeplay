@@ -84,3 +84,21 @@ def test_static_sites_relocate_leylines():
     data[0xA00 : 0xA00 + len(leylines.POI_VISIBLE_ORIG)] = leylines.POI_VISIBLE_ORIG
     sites = patch_manifest.static_sites(data)
     assert sites["leylines"][0][0] == 0xA00
+
+
+def test_static_sites_relocate_jump():
+    import gameplay_patches as gp
+
+    data = bytearray(0x2000)
+    data[0xB00 : 0xB00 + len(gp.AIRSPEED_ORIG)] = gp.AIRSPEED_ORIG
+    sites = patch_manifest.static_sites(data)
+    assert any(offset == 0xB00 for offset, _length, _original in sites["jump"])
+
+
+def test_static_sites_relocate_intro():
+    import gameplay_patches as gp
+
+    data = bytearray(0x2000)
+    data[0xC00 : 0xC00 + len(gp.TITLE_TICK_ORIG)] = gp.TITLE_TICK_ORIG
+    sites = patch_manifest.static_sites(data)
+    assert sites["intro"][0][0] == 0xC00
