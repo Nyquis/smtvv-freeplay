@@ -2,7 +2,7 @@
 
 Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
 
-**Current version: 5.14.0**
+**Current version: 5.15.0**
 
 ## Features
 
@@ -114,6 +114,11 @@ See **[INSTALL.md](INSTALL.md)** for the full step-by-step. Quick version below.
    changed or removed). Enter continues, Esc goes back. The review is the
    first point at which anything is written.
 
+   After the review, a preflight check runs with a progress bar and a summary
+   (source, cave, data tables and selected patches). Press Enter to install;
+   the install screen tracks each stage and ends with a Done card. Press `d`
+   on the check or Done cards to read the full patcher log.
+
    Run `install.bat` again later to add or remove mods: installed mods are
    pre-selected, and the first screen offers to uninstall everything.
 
@@ -196,8 +201,9 @@ New work should use `patch_smtvv_freeplay.py`.
 ## Uninstall
 
 Run `uninstall.bat` (Windows) or `./uninstall.sh` (Linux), or run `install.bat`
-and choose **u** on the first screen. This restores the original executable and
-removes the mod's data paks and, if installed, DualSense Haptics.
+and choose **Restore the original game files** on the first screen. This
+restores the original executable and removes the mod's data paks, haptics and
+feature record.
 
 You can also restore the executable through Steam:
 

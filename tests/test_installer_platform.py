@@ -47,3 +47,20 @@ def test_parse_library_paths_reads_vdf_entries():
 def test_installed_paks_are_unique_and_nonempty():
     assert len(platform.INSTALLED_PAKS) == len(set(platform.INSTALLED_PAKS))
     assert all(name.endswith(".pak") for name in platform.INSTALLED_PAKS)
+
+
+def test_start_patcher_streams_lines(tmp_path):
+    script = tmp_path / "fake.py"
+    script.write_text(
+        "print('[1/2] One')\nprint('  detail')\nprint('[2/2] Two')\n",
+        encoding="utf-8",
+    )
+    stream = platform.start_patcher(script, tmp_path, [], check=True)
+    lines = []
+    while True:
+        line = stream.queue.get(timeout=10)
+        if line is None:
+            break
+        lines.append(line)
+    assert lines == ["[1/2] One", "  detail", "[2/2] Two"]
+    assert stream.process.wait(timeout=10) == 0

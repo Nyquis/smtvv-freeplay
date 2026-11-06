@@ -30,8 +30,11 @@ again.
    (per category: game default, free, or free and immediate), and **Review**
    (install/change/remove against the current install). Enter continues, Esc
    goes back; nothing is written before the review.
+   After the review, a preflight check runs with a progress bar and a summary;
+   Enter applies the patches and tracks each install stage. Press `d` on the
+   check or Done cards to read the full patcher log.
    Run `install.bat` again later to add or remove mods; installed mods are
-   pre-selected and the first screen offers to uninstall everything.
+   pre-selected and the first screen offers to restore the original files.
 5. If it can't find the game automatically, paste your SMT5V folder path when
    asked (Steam → right-click SMT5V:V → Manage → Browse local files → copy the
    path from the address bar).
@@ -69,8 +72,8 @@ Only the installer differs.
 
 ## Uninstall
 
-- **Windows:** run `install.bat` and choose **u** on the first screen, or run
-  `uninstall.bat`.
+- **Windows:** run `install.bat` and choose **Restore the original game files**
+  on the first screen, or run `uninstall.bat`.
 - **Steam Deck / Linux:** run `./uninstall.sh`.
 
 The uninstall scripts restore the original executable and remove the mod's

@@ -111,6 +111,60 @@ def test_review_allows_uninstall_when_something_is_installed(monkeypatch, tmp_pa
     assert entry.screen_review(wizard) == "apply"
 
 
+def test_review_offers_restore_original(monkeypatch, tmp_path):
+    baseline = state.Selection(mods={"heal": True})
+    wizard = _wizard(monkeypatch, tmp_path, baseline=baseline)
+    _keys(monkeypatch, "r")
+    assert entry.screen_review(wizard) == "restore"
+
+
+def test_done_card_falls_back_to_ascii_checks(monkeypatch, tmp_path):
+    wizard = _wizard(monkeypatch, tmp_path)
+    body = entry._done_body(
+        wizard,
+        {
+            "patches": 1,
+            "total": 1,
+            "paks": 0,
+            "backup": "existing",
+            "haptics": "not selected",
+        },
+    )
+    assert not any("✓" in line for line in body)
+    assert any(line.lstrip().startswith("+") for line in body)
+
+
+def test_status_screen_picks_restore(monkeypatch, tmp_path):
+    baseline = state.Selection(mods={"heal": True})
+    wizard = _wizard(monkeypatch, tmp_path, baseline=baseline)
+    _keys(monkeypatch, "down", "enter")
+    assert entry.status_screen(wizard) == "restore"
+
+
+def test_confirm_restore_enter_and_escape(monkeypatch, tmp_path):
+    wizard = _wizard(monkeypatch, tmp_path)
+    _keys(monkeypatch, "enter")
+    assert entry.confirm_restore(wizard) is True
+    _keys(monkeypatch, "esc")
+    assert entry.confirm_restore(wizard) is False
+
+
+def test_restore_flow_puts_the_original_back(monkeypatch, tmp_path):
+    wizard = _wizard(monkeypatch, tmp_path)
+    binary = wizard.game.joinpath(*state.BIN_PARTS)
+    (binary / state.EXE).write_bytes(b"patched")
+    (binary / f"{state.EXE}.original").write_bytes(b"original")
+    (binary / state.FEATURES).write_text("heal=1\n", encoding="utf-8")
+    paks = wizard.game.joinpath(*state.PAKS_PARTS)
+    paks.mkdir(parents=True)
+    (paks / "pakchunk99_NGPlusMiracles_P.pak").write_bytes(b"pak")
+    _keys(monkeypatch, "enter")
+    assert entry.restore_flow(wizard) == 0
+    assert (binary / state.EXE).read_bytes() == b"original"
+    assert not (binary / state.FEATURES).exists()
+    assert not (paks / "pakchunk99_NGPlusMiracles_P.pak").exists()
+
+
 def test_split_args_reads_game_dir_and_flags():
     game, flags, scripted = entry.split_args(["--game-dir", "C:\\game", "--no-heal"])
     assert game == "C:\\game"

@@ -59,6 +59,26 @@ def test_framed_ascii_lines_share_a_width():
     assert lines[-1].startswith("+")
 
 
+def test_bar_uses_unicode_blocks():
+    console = _plain_console()
+    console.unicode = True
+    assert ui.bar(console, 0, 10) == "░" * 10
+    assert ui.bar(console, 1, 10) == "█" * 10
+    assert len(ui.bar(console, 0.5, 10)) == 10
+
+
+def test_bar_has_an_ascii_fallback():
+    console = _plain_console()
+    assert ui.bar(console, 0, 4) == "----"
+    assert ui.bar(console, 1, 4) == "####"
+
+
+def test_spinner_cycles():
+    console = _plain_console()
+    assert ui.spinner(console, 0) == "|"
+    assert ui.spinner(console, 1) == "/"
+
+
 def test_framed_unicode_uses_box_drawing():
     console = _plain_console()
     console.unicode = True

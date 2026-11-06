@@ -7,6 +7,7 @@ their arguments; everything below is standard library only.
 from __future__ import annotations
 
 import os
+import queue
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -569,21 +570,414 @@ def screen_review(w: Wizard) -> str:
                     f"   {counts['install']} to install, {counts['change']} to change, "
                     f"{counts['remove']} to remove, {counts['keep']} unchanged."
                 )
-            footer = [
-                w.console.hint(
-                    "enter apply   esc back"
-                    if not empty or removable
-                    else "esc back to the mod list"
-                )
-            ]
+            hints = (
+                "enter apply   esc back"
+                if not empty or removable
+                else "esc back to the mod list"
+            )
+            if w.installed:
+                hints += "   r restore original"
+            footer = [w.console.hint(hints)]
             _draw(w, "Step 4 of 4: Review", body, footer)
             key = ui.read_key(w.console)
             if key == "enter" and (not empty or removable):
                 return "apply"
+            if key == "r" and w.installed:
+                return "restore"
             if key in ("esc", "q"):
                 return "back"
     finally:
         w.screen.end()
+
+
+def _wrap(console: ui.Console, text: str, prefix: str = "   ") -> list[str]:
+    width = min(console.width(), 100) - 8
+    return [prefix + line for line in ui.wrap_text(text, width)]
+
+
+def _draw_preflight(
+    w: Wizard, run: state.PatchRun, tick: int, final: bool, ok: bool
+) -> None:
+    console = w.console
+    if final:
+        status = (
+            console.green(
+                f"{console.check()} Preflight complete - nothing was written."
+            )
+            if ok
+            else console.red(
+                f"{console.cross()} Preflight failed - nothing was written."
+            )
+        )
+    else:
+        status = f"{console.cyan(ui.spinner(console, tick))} Checking patches..."
+    body = [f" {status}", ""]
+    if run.total:
+        body.append(f" {ui.bar(console, run.fraction())}  {run.done}/{run.total}")
+    elif not final:
+        body.append(f" {console.dim('Reading and scanning the executable...')}")
+    body.append("")
+    if run.source_choice:
+        body.append(f" {console.dim('Source:')} {run.source_choice}")
+    if run.file_size:
+        body.append(f" {console.dim('Size:')}   {run.file_size}")
+    if run.cave:
+        body.append(f" {console.dim('Cave:')}   {run.cave}")
+    if run.tables_total:
+        body.append(f" {console.dim('Tables:')} {run.tables_ok}/{run.tables_total} ok")
+    if not final and run.current:
+        body.append("")
+        body.append(f" {console.bold(run.current)}")
+        for detail in run.patches[-1][1][:2]:
+            body.append("   " + console.dim(detail))
+    if final and run.selected:
+        body.append("")
+        for line in _wrap(console, ", ".join(run.selected)):
+            body.append(console.dim(line))
+    for warning in run.warnings[:4]:
+        body.append(" " + console.yellow("[!] " + warning))
+    footer = [
+        console.hint(
+            "enter continue   d details"
+            if final
+            else "nothing is written during this step"
+        )
+    ]
+    right = f"{run.done}/{run.total}" if run.total else ""
+    _draw(w, "Step 1 of 2: Preflight check", body, footer, right=right)
+
+
+def show_log(w: Wizard, title: str, log: list[str]) -> None:
+    visible = max(4, w.console.height() - 9)
+    offset = max(0, len(log) - visible)
+    w.screen.begin()
+    try:
+        while True:
+            shown = log[offset : offset + visible] or [w.console.dim("(empty)")]
+            end = min(len(log), offset + visible)
+            body = [" " + line for line in shown]
+            footer = [
+                w.console.hint(
+                    f"up/down scroll   enter close   ({offset + 1}-{end} of {len(log)})"
+                )
+            ]
+            _draw(w, title, body, footer)
+            key = ui.read_key(w.console)
+            if key == "up":
+                offset = max(0, offset - 1)
+            elif key == "down":
+                offset = min(max(0, len(log) - visible), offset + 1)
+            elif key in ("enter", "esc"):
+                return
+    finally:
+        w.screen.end()
+
+
+def _await_card(
+    w: Wizard, title: str, body: list[str], log: list[str] | None = None
+) -> None:
+    w.screen.begin()
+    try:
+        while True:
+            footer = [w.console.hint("enter close" + ("   d details" if log else ""))]
+            _draw(w, title, body, footer)
+            key = ui.read_key(w.console)
+            if key == "enter":
+                return
+            if key == "d" and log:
+                w.screen.end()
+                show_log(w, f"{title} - log", log)
+                w.screen.begin()
+    finally:
+        w.screen.end()
+
+
+def _run_preflight(w: Wizard, flags: list[str]) -> tuple[bool, state.PatchRun]:
+    run = state.PatchRun()
+    if not w.console.tty:
+        result = platform.run_patcher(PATCH_SCRIPT, w.game, flags, check=True)
+        for line in (result.stdout or "").splitlines():
+            run.feed(line)
+        if result.returncode == 0:
+            w.console.write(w.console.green("  All selected patches verified."))
+        else:
+            for line in (result.stdout or "").splitlines():
+                w.console.write("  " + line)
+            w.console.write(
+                w.console.red("  Patch verification failed. Nothing was written.")
+            )
+        for warning in run.warnings:
+            w.console.write(w.console.yellow("  WARNING: " + warning))
+        return result.returncode == 0, run
+
+    stream = platform.start_patcher(PATCH_SCRIPT, w.game, flags, check=True)
+    tick = 0
+    w.screen.begin()
+    try:
+        while True:
+            try:
+                line = stream.queue.get(timeout=0.1)
+            except queue.Empty:
+                _draw_preflight(w, run, tick, False, False)
+                tick += 1
+                continue
+            if line is None:
+                break
+            run.feed(line)
+            _draw_preflight(w, run, tick, False, False)
+            tick += 1
+    finally:
+        w.screen.end()
+    code = stream.process.wait()
+    ok = code == 0 and not run.failed
+    w.screen.begin()
+    try:
+        while True:
+            _draw_preflight(w, run, tick, True, ok)
+            key = ui.read_key(w.console)
+            if key == "enter":
+                return ok, run
+            if key == "d":
+                w.screen.end()
+                show_log(w, "Preflight log", run.log)
+                w.screen.begin()
+    finally:
+        w.screen.end()
+
+
+def _draw_install(
+    w: Wizard,
+    stages: list[tuple[str, str]],
+    run: state.PatchRun,
+    tick: int,
+    note: str,
+    applying: bool,
+) -> None:
+    console = w.console
+    lead = (
+        console.green(console.check())
+        if note == "Done."
+        else console.cyan(ui.spinner(console, tick))
+    )
+    body = [f" {lead} {note}"]
+    if applying and run.total:
+        body.append(f" {ui.bar(console, run.fraction())}  {run.done}/{run.total}")
+    elif applying:
+        body.append(f" {console.dim('Working...')}")
+    body.append("")
+    for label, status in stages:
+        mark = {"done": "[x]", "active": "[>]", "failed": "[!]", "pending": "[ ]"}[
+            status
+        ]
+        line = f" {mark} {label}"
+        body.append(console.green(line) if status == "done" else line)
+    if applying and run.current:
+        body.append("")
+        body.append(f" {console.bold(run.current)}")
+        for detail in run.patches[-1][1][:2]:
+            body.append("   " + console.dim(detail))
+    for warning in run.warnings[-3:]:
+        body.append(" " + console.yellow("[!] " + warning))
+    footer = [console.hint("do not close this window" if applying else "working...")]
+    right = f"{run.done}/{run.total}" if applying and run.total else ""
+    _draw(w, "Step 2 of 2: Installing", body, footer, right=right)
+
+
+def _failure_body(w: Wizard, run: state.PatchRun) -> list[str]:
+    body = [f" {w.console.red(w.console.cross() + ' Patcher failed')}", ""]
+    if run.total:
+        body.append(f" {run.done}/{run.total} patches applied")
+    body.append(" The executable was not replaced.")
+    body.append("")
+    for line in run.tail(6):
+        body.append("   " + line.strip())
+    return body
+
+
+def _done_body(w: Wizard, summary: dict) -> list[str]:
+    console = w.console
+    backup = "created" if summary.get("backup") == "created" else "found"
+    body = [
+        f" {console.green(console.check())} Preflight verified",
+        (
+            f" {console.green(console.check())} {summary.get('patches', 0)}/"
+            f"{summary.get('total', 0)} patches applied and verified"
+        ),
+        f" {console.green(console.check())} Executable installed (backup {backup})",
+        f" {console.green(console.check())} {summary.get('paks', 0)} data paks rebuilt",
+        f" {console.green(console.check())} Feature record written",
+    ]
+    haptics = summary.get("haptics", "not selected")
+    if haptics != "not selected":
+        body.append(f" {console.green(console.check())} DualSense Haptics {haptics}")
+    body.append("")
+    body += _wrap(
+        console,
+        "Run install.bat again to change mods, or choose 'Restore the original "
+        "game files' to revert. Save data was not touched.",
+    )
+    return body
+
+
+def _run_install(w: Wizard, has_haptics: bool) -> dict:
+    bindir = platform.bin_dir(w.game)
+    original_existed = (bindir / f"{state.EXE}.original").is_file()
+    run = state.PatchRun()
+    stages: list[tuple[str, str]] = [
+        ("Preflight verified", "done"),
+        ("Applying patches", "active"),
+        ("Installing executable", "pending"),
+        ("Write feature record", "pending"),
+        ("Finishing touches", "pending"),
+    ]
+    stream = platform.start_patcher(
+        PATCH_SCRIPT, w.game, w.selection.flags(), check=False
+    )
+    tick = 0
+    w.screen.begin()
+    try:
+        while True:
+            try:
+                line = stream.queue.get(timeout=0.1)
+            except queue.Empty:
+                _draw_install(w, stages, run, tick, "Applying patches...", True)
+                tick += 1
+                continue
+            if line is None:
+                break
+            run.feed(line)
+            _draw_install(w, stages, run, tick, "Applying patches...", True)
+            tick += 1
+        code = stream.process.wait()
+        if code != 0 or run.failed:
+            stages[1] = ("Applying patches", "failed")
+            _draw_install(w, stages, run, tick, "Patcher failed", False)
+            w.screen.end()
+            _await_card(w, "Installation failed", _failure_body(w, run), run.log)
+            return {"ok": False}
+        stages[1] = ("Applying patches", "done")
+
+        stages[2] = ("Installing executable", "active")
+        _draw_install(w, stages, run, tick, "Installing executable...", False)
+        platform.install_patched(bindir, lambda _message: None)
+        stages[2] = ("Installing executable", "done")
+
+        stages[3] = ("Write feature record", "active")
+        _draw_install(w, stages, run, tick, "Writing feature record...", False)
+        platform.move_features(bindir)
+        stages[3] = ("Write feature record", "done")
+
+        stages[4] = ("Finishing touches", "active")
+        _draw_install(w, stages, run, tick, "Finishing touches...", False)
+        haptics = "not selected"
+        if os.name == "nt" and w.selection.haptics:
+            haptics = (
+                "installed"
+                if platform.install_haptics(
+                    bindir, HAPTICS_SOURCE, lambda _message: None
+                )
+                else "skipped"
+            )
+            if haptics == "installed":
+                platform.record_haptics(bindir)
+        elif os.name == "nt" and has_haptics:
+            platform.remove_haptics(bindir, HAPTICS_SOURCE, lambda _message: None)
+            haptics = "removed"
+        platform.remove_legacy_superjump(bindir, HAPTICS_SOURCE, lambda _message: None)
+        stages[4] = ("Finishing touches", "done")
+        _draw_install(w, stages, run, tick, "Done.", False)
+    finally:
+        w.screen.end()
+
+    summary = {
+        "ok": True,
+        "patches": run.done,
+        "total": run.total,
+        "paks": run.paks,
+        "verified": run.verified,
+        "backup": "existing" if original_existed else "created",
+        "haptics": haptics,
+    }
+    _await_card(w, "Done", _done_body(w, summary), run.log)
+    return summary
+
+
+def status_screen(w: Wizard) -> str:
+    options = ["change", "restore", "quit"]
+    labels = [
+        "Change installed mods",
+        "Restore the original game files",
+        "Quit",
+    ]
+    cursor = 0
+    w.screen.begin()
+    try:
+        while True:
+            body = [f" Installed: {w.installed} of {state.total_mods()} mods", ""]
+            for index, label in enumerate(labels):
+                pointer = w.console.marker() if index == cursor else " "
+                body.append(f" {pointer} {label}")
+            footer = [w.console.hint("up/down move   enter select   esc quit")]
+            _draw(w, "Freeplay setup", body, footer)
+            key = ui.read_key(w.console)
+            if key == "up":
+                cursor = (cursor - 1) % len(labels)
+            elif key == "down":
+                cursor = (cursor + 1) % len(labels)
+            elif key == "enter":
+                return options[cursor]
+            elif key in ("esc", "q"):
+                return "quit"
+    finally:
+        w.screen.end()
+
+
+def confirm_restore(w: Wizard) -> bool:
+    original = platform.bin_dir(w.game) / f"{state.EXE}.original"
+    body = _wrap(
+        w.console,
+        "This copies the original executable over the live one and removes the "
+        "mod data paks, haptics and the feature record. Save data is not touched.",
+    )
+    body.append("")
+    if original.is_file():
+        body += _wrap(
+            w.console,
+            f"Backup found: {state.EXE}.original",
+            prefix="   ",
+        )
+    else:
+        for line in _wrap(
+            w.console,
+            "No backup found. Steam > Verify Integrity restores the executable; "
+            "the mod data paks will still be removed.",
+        ):
+            body.append(w.console.yellow(line))
+    footer = [w.console.hint("enter restore   esc cancel")]
+    w.screen.begin()
+    try:
+        while True:
+            _draw(w, "Restore the original game files", body, footer)
+            key = ui.read_key(w.console)
+            if key == "enter":
+                return True
+            if key in ("esc", "q"):
+                return False
+    finally:
+        w.screen.end()
+
+
+def restore_flow(w: Wizard) -> int:
+    run_uninstall(w.game, w.console)
+    body = [
+        f" {w.console.green(w.console.check())} Original executable restored",
+        f" {w.console.green(w.console.check())} Mod data paks removed",
+        f" {w.console.green(w.console.check())} Feature record removed",
+        "",
+    ]
+    body += _wrap(w.console, "Restart the game from Steam when you are ready.")
+    _await_card(w, "Restored", body)
+    return 0
 
 
 def run_interactive(game_arg: str | None, console: ui.Console) -> int:
@@ -609,10 +1003,6 @@ def run_interactive(game_arg: str | None, console: ui.Console) -> int:
     selection = state.selection_from(features)
     installed = baseline.count()
     status_line(console, game, baseline)
-    if installed:
-        answer = ui.ask_text(console, "[Enter] change mods   [u] uninstall everything")
-        if answer.lower() == "u":
-            return run_uninstall(game, console)
 
     w = Wizard(
         console=console,
@@ -623,13 +1013,33 @@ def run_interactive(game_arg: str | None, console: ui.Console) -> int:
         baseline=baseline,
         installed=installed,
     )
+    if installed:
+        while True:
+            choice = status_screen(w)
+            if choice == "quit":
+                console.write("")
+                console.write("  Cancelled. Nothing was written.")
+                return 1
+            if choice == "change":
+                break
+            if confirm_restore(w):
+                return restore_flow(w)
+
     steps = [screen_mods, screen_gameplay, screen_shop, screen_review]
     index = 0
     while 0 <= index < len(steps):
         result = steps[index](w)
         if result == "apply":
+            if w.selection.count() == 0:
+                if confirm_restore(w):
+                    return restore_flow(w)
+                continue
             index = len(steps)
             break
+        if result == "restore":
+            if confirm_restore(w):
+                return restore_flow(w)
+            continue
         if result == "next":
             index += 1
         elif result == "back":
@@ -644,25 +1054,34 @@ def run_interactive(game_arg: str | None, console: ui.Console) -> int:
             return 1
 
     if w.selection.count() == 0:
-        return run_uninstall(game, console)
+        console.write("")
+        console.write("  No mods chosen. Nothing was written.")
+        return 0
 
-    console.clear()
-    banner(console, version)
-    status_line(console, game, w.selection)
-    if not run_patcher_steps(game, w.selection.flags(), console):
+    if not console.tty:
+        console.clear()
+        banner(console, version)
+        status_line(console, game, w.selection)
+        if not run_patcher_steps(game, w.selection.flags(), console):
+            ui.wait_for_enter(console)
+            return 1
+        finish_install(
+            game,
+            w.selection,
+            has_haptics=features.get("haptics") == "1",
+            console=console,
+        )
+        console.write("")
+        console.write(console.green("  Done - mods installed."))
+        console.write("  Run this installer again to change or remove mods.")
         ui.wait_for_enter(console)
+        return 0
+
+    ok, _run = _run_preflight(w, w.selection.flags())
+    if not ok:
         return 1
-    finish_install(
-        game,
-        w.selection,
-        has_haptics=features.get("haptics") == "1",
-        console=console,
-    )
-    console.write("")
-    console.write(console.green("  Done - mods installed."))
-    console.write("  Run this installer again to change or remove mods.")
-    ui.wait_for_enter(console)
-    return 0
+    summary = _run_install(w, features.get("haptics") == "1")
+    return 0 if summary.get("ok") else 1
 
 
 def main(argv: list[str] | None = None) -> int:

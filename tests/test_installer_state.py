@@ -104,3 +104,61 @@ def test_total_matches_the_catalogue_groups(monkeypatch):
 
 def test_missing_features_file_is_empty(tmp_path):
     assert state.read_features(tmp_path / "Freeplay.features") == {}
+
+
+SAMPLE_RUN = [
+    "  Source check :",
+    "    live        e0419dd1dc93",
+    "    original    8e38e3c39cd2",
+    "    patched     e0419dd1dc93",
+    "  Using original backup.",
+    "  File size: 338,513,288 bytes",
+    "  Data tables:",
+    "  [ok] ItemTable: 40,421 bytes",
+    "  [ok] BP_EstomaData: 208 bytes",
+    "  Cave check  : 0x00522031  len=1487  section=.rdata",
+    "  Patches selected: Essences, Heal, Stockpile",
+    "  [1/3] Essences",
+    "    Code cave     : 0x00522031  (22 bytes)",
+    "  [2/3] Heal",
+    "  [3/3] Stockpile",
+    "    Data pak      : pakchunk93_FreeplayStockpile_P.pak",
+    "  WARNING: something went sideways",
+    "  Verified patched executable.",
+    "  Check complete - nothing was written.",
+]
+
+
+def test_patch_run_reads_the_check_report():
+    run = state.PatchRun()
+    for line in SAMPLE_RUN:
+        run.feed(line)
+    assert run.total == 3
+    assert run.done == 3
+    assert run.selected == ["Essences", "Heal", "Stockpile"]
+    assert run.patches[0] == ("Essences", ["Code cave     : 0x00522031  (22 bytes)"])
+    assert run.source == {
+        "live": "e0419dd1dc93",
+        "original": "8e38e3c39cd2",
+        "patched": "e0419dd1dc93",
+    }
+    assert run.source_choice == "Using original backup."
+    assert run.file_size == "338,513,288 bytes"
+    assert run.tables_total == 2 and run.tables_ok == 2
+    assert "0x00522031" in run.cave
+    assert run.paks == 1
+    assert run.warnings == ["something went sideways"]
+    assert run.verified is True
+    assert run.complete is True
+    assert run.failed is False
+    assert run.fraction() == 1.0
+
+
+def test_patch_run_marks_a_failed_check():
+    run = state.PatchRun()
+    run.feed("  Patches selected: Magatsuhi")
+    run.feed("  Check summary: failed: magatsuhi")
+    assert run.failed is True
+    assert run.total == 1
+    assert run.done == 0
+    assert run.fraction() == 0.0

@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import os
+import queue
 import re
 import shutil
 import subprocess
 import sys
+import threading
+from dataclasses import dataclass
 from pathlib import Path
 
 from boot_pak import BOOT_PAK
@@ -311,3 +314,38 @@ def run_patcher(script: Path, game_dir: Path, flags: list[str], check: bool = Fa
     if check:
         command.append("--check")
     return subprocess.run(command, check=False, text=True, capture_output=check)
+
+
+@dataclass
+class PatchStream:
+    process: subprocess.Popen
+    queue: queue.Queue
+
+
+def start_patcher(
+    script: Path, game_dir: Path, flags: list[str], check: bool = False
+) -> PatchStream:
+    """Run the patcher with its output streamed through a queue."""
+    command = [sys.executable, str(script), "--game-dir", str(game_dir), *flags]
+    if check:
+        command.append("--check")
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    lines: queue.Queue = queue.Queue()
+
+    def pump() -> None:
+        assert process.stdout is not None
+        try:
+            for line in process.stdout:
+                lines.put(line.rstrip("\r\n"))
+        finally:
+            process.stdout.close()
+            lines.put(None)
+
+    threading.Thread(target=pump, daemon=True).start()
+    return PatchStream(process=process, queue=lines)

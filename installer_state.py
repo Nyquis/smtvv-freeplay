@@ -332,6 +332,108 @@ def autosave_choice(text: str, current: int | None) -> int | None | str:
     return "invalid"
 
 
+_PATCH_LINE = re.compile(r"^\[(\d+)/(\d+)\]\s+(.+)$")
+_SOURCE_LINE = re.compile(r"^(live|original|patched)\s+([0-9a-f]+)$")
+
+
+@dataclass
+class PatchRun:
+    """Live view of a patcher run, fed one output line at a time."""
+
+    total: int = 0
+    done: int = 0
+    current: str = ""
+    selected: list[str] = field(default_factory=list)
+    patches: list[tuple[str, list[str]]] = field(default_factory=list)
+    source: dict[str, str] = field(default_factory=dict)
+    source_choice: str = ""
+    file_size: str = ""
+    cave: str = ""
+    tables_ok: int = 0
+    tables_total: int = 0
+    paks: int = 0
+    warnings: list[str] = field(default_factory=list)
+    verified: bool = False
+    complete: bool = False
+    failed: bool = False
+    log: list[str] = field(default_factory=list)
+    _section: str = ""
+
+    def feed(self, line: str) -> None:
+        self.log.append(line.rstrip("\r\n"))
+        text = line.rstrip("\r\n")
+        stripped = text.strip()
+        if not stripped:
+            return
+        match = _PATCH_LINE.match(stripped)
+        if match:
+            self.done = int(match.group(1))
+            self.total = int(match.group(2))
+            self.current = match.group(3)
+            self.patches.append((self.current, []))
+            self._section = ""
+            return
+        if text.startswith("    ") and self.patches and self.current:
+            self.patches[-1][1].append(stripped)
+            if stripped.startswith("Data pak") and "check only" not in stripped:
+                self.paks += 1
+            return
+        if stripped.startswith("Patches selected:"):
+            names = stripped.split(":", 1)[1]
+            self.selected = [name.strip() for name in names.split(",") if name.strip()]
+            if not self.total:
+                self.total = len(self.selected)
+            self._section = ""
+            return
+        if stripped.startswith("Source check"):
+            self._section = "source"
+            return
+        if self._section == "source":
+            source = _SOURCE_LINE.match(stripped)
+            if source:
+                self.source[source.group(1)] = source.group(2)
+                return
+        if stripped.startswith("Using "):
+            self.source_choice = stripped
+            self._section = ""
+            return
+        if stripped.startswith("File size:"):
+            self.file_size = stripped.split(":", 1)[1].strip()
+            return
+        if stripped.startswith("Data tables:"):
+            self._section = "tables"
+            return
+        if self._section == "tables" and stripped.startswith("[ok]"):
+            self.tables_total += 1
+            self.tables_ok += 1
+            return
+        if stripped.startswith("Cave check"):
+            self.cave = stripped.split(":", 1)[1].strip()
+            self._section = ""
+            return
+        if stripped.startswith("WARNING:"):
+            self.warnings.append(stripped.removeprefix("WARNING:").strip())
+            return
+        if stripped.startswith("Verified patched executable"):
+            self.verified = True
+            return
+        if stripped.startswith("Check complete"):
+            self.complete = True
+            self._section = ""
+            return
+        if stripped.startswith(("Check failed", "Check summary")):
+            self.failed = True
+            self._section = ""
+            return
+
+    def fraction(self) -> float:
+        return 0.0 if not self.total else min(1.0, self.done / self.total)
+
+    def tail(self, count: int) -> list[str]:
+        lines = [line for line in self.log if line.strip()]
+        return lines[-count:]
+
+
 _VERSION_RE = re.compile(r'MOD_VERSION = "([^"]+)"')
 
 

@@ -100,6 +100,12 @@ class Console:
     def bullet(self) -> str:
         return "•" if self.unicode else "*"
 
+    def check(self) -> str:
+        return "✓" if self.unicode else "+"
+
+    def cross(self) -> str:
+        return "✗" if self.unicode else "x"
+
     def write(self, text: str = "") -> None:
         sys.stdout.write(text + "\n")
         sys.stdout.flush()
@@ -128,6 +134,19 @@ def _fit(text: str, width: int) -> str:
         return text
     plain = _ANSI.sub("", text)
     return plain[: width - 3] + "..."
+
+
+def spinner(console: Console, tick: int) -> str:
+    frames = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏" if console.unicode else "|/-\\"
+    return frames[tick % len(frames)]
+
+
+def bar(console: Console, fraction: float, width: int = 28) -> str:
+    fraction = max(0.0, min(1.0, fraction))
+    filled = round(width * fraction)
+    full = "█" if console.unicode else "#"
+    empty = "░" if console.unicode else "-"
+    return full * filled + empty * (width - filled)
 
 
 def wrap_text(text: str, width: int) -> list[str]:
