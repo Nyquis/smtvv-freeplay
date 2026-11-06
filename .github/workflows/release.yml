@@ -24,10 +24,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" dist/*.zip --clobber
-          else
-            gh release create "$GITHUB_REF_NAME" dist/*.zip \
+          set -u
+          for attempt in 1 2 3; do
+            if [ "$attempt" -gt 1 ]; then
+              echo "Retrying release publish in $((attempt * 10))s..."
+              sleep $((attempt * 10))
+            fi
+            if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+              if gh release upload "$GITHUB_REF_NAME" dist/*.zip --clobber; then
+                exit 0
+              fi
+            elif gh release create "$GITHUB_REF_NAME" dist/*.zip \
               --title "SMTVV Freeplay ${GITHUB_REF_NAME#v}" \
-              --generate-notes
-          fi
+              --generate-notes; then
+              exit 0
+            fi
+            echo "Attempt $attempt failed."
+          done
+          echo "Release publish failed after 3 attempts." >&2
+          exit 1
