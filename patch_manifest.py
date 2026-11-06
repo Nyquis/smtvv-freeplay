@@ -107,9 +107,14 @@ def static_sites(data: bytes | bytearray) -> dict[str, list[tuple[int, int, byte
         mimans if mimans is not None else patcher.MIMAN_POS_CHECK_OFFSET,
         len(patcher.MIMAN_POS_CHECK_ORIG),
     )
+    leyline_offset = signatures.resolve(
+        data, gp.off(leylines.POI_VISIBLE_SITE), leylines.POI_VISIBLE_ORIG
+    )
     add(
         "leylines",
-        gp.off(leylines.POI_VISIBLE_SITE),
+        leyline_offset
+        if leyline_offset is not None
+        else gp.off(leylines.POI_VISIBLE_SITE),
         len(leylines.POI_VISIBLE_ORIG),
     )
     add("miracles", patcher.MIRACLE_ADDED_TRAMP, len(patcher.MIRACLE_ADDED_ORIG))

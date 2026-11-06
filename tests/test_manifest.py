@@ -75,3 +75,12 @@ def test_validate_pak_reports_an_unreadable_pak(tmp_path, monkeypatch):
     )
     failures = patch_manifest.validate_pak("repak", str(pak), "stockpile")
     assert failures and "cannot list" in failures[0]
+
+
+def test_static_sites_relocate_leylines():
+    import leylines
+
+    data = bytearray(0x2000)
+    data[0xA00 : 0xA00 + len(leylines.POI_VISIBLE_ORIG)] = leylines.POI_VISIBLE_ORIG
+    sites = patch_manifest.static_sites(data)
+    assert sites["leylines"][0][0] == 0xA00

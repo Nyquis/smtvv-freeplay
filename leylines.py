@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import struct
 
+import signatures
 from gameplay_patches import Asm, _jmp_site, _place, off, va
 
 # UMinimapManager icon renderer, POIType test:
@@ -33,23 +34,27 @@ def patch_leylines(data: bytearray, cave_off: int, cave_end: int) -> int | None:
 
     Returns the next free cave offset, or None when the code does not match.
     """
-    site = off(POI_VISIBLE_SITE)
-    if data[site : site + len(POI_VISIBLE_ORIG)] != POI_VISIBLE_ORIG:
+    site = signatures.resolve(data, off(POI_VISIBLE_SITE), POI_VISIBLE_ORIG)
+    if site is None:
         return None
+    site_va = va(site)
+    delta = site_va - POI_VISIBLE_SITE
+    visible = POI_VISIBLE + delta
+    cont = POI_CONTINUE + delta
 
     a = Asm(va(cave_off))
     a.raw("0F B6 0B")  # movzx ecx, byte ptr [rbx]
     a.raw(f"80 F9 {RYUKETSU_POI_TYPE:02X}")  # cmp cl, RYUKETSU
-    a.je(POI_VISIBLE)  # je visible
+    a.je(visible)  # je visible
     a.raw("80 E9 04")  # sub cl, 4
     a.raw("F6 C1 F7")  # test cl, 0F7h
-    a.je(POI_VISIBLE)  # je visible
-    a.jmp(POI_CONTINUE)  # jmp continue
+    a.je(visible)  # je visible
+    a.jmp(cont)  # jmp continue
     code = a.build()
 
     dest = va(cave_off)
     cave_off = _place(data, cave_off, cave_end, code, base_va=dest, check_refs=True)
-    _jmp_site(data, POI_VISIBLE_SITE, dest, len(POI_VISIBLE_ORIG))
+    _jmp_site(data, site_va, dest, len(POI_VISIBLE_ORIG))
     return cave_off
 
 
