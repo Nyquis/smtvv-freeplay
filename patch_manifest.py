@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Callable
+from dataclasses import dataclass
 
 import autosave
 import boot_pak
@@ -25,16 +27,253 @@ import stockpile
 MIRACLE_PAK = "pakchunk99_NGPlusMiracles_P.pak"
 LEGACY_MAP_PAK = "pakchunk95_FreeplayMap_P.pak"  # removed Timed Quest Markers
 
+
+def _patcher():
+    import patch_smtvv_freeplay as patcher
+
+    return patcher
+
+
+def _off_sites(offset: int, original: bytes) -> list[tuple[int, int]]:
+    return [(offset, len(original))]
+
+
+def _resolved_off(data, offset: int, original: bytes) -> list[tuple[int, int]]:
+    resolved = signatures.resolve(data, offset, original)
+    return [(resolved if resolved is not None else offset, len(original))]
+
+
+def _resolved_va(data, address: int, original: bytes) -> list[tuple[int, int]]:
+    offset = gp.off(address)
+    resolved = signatures.resolve(data, offset, original)
+    return [(resolved if resolved is not None else offset, len(original))]
+
+
+def _nextstep_sites() -> list[tuple[int, int]]:
+    return [(gp.off(thunk), 5) for thunk in gp.SETNEXTSTEP_THUNKS]
+
+
+def _essences_sites(data) -> list[tuple[int, int]]:
+    p = _patcher()
+    return _off_sites(p.TRAMP_OFFSET, p.TRAMP_ORIG)
+
+
+def _heal_sites(data) -> list[tuple[int, int]]:
+    p = _patcher()
+    return _off_sites(p.RYUKETSU_TRAMP_OFFSET, p.RYUKETSU_TRAMP_ORIG)
+
+
+def _miman_sites(data) -> list[tuple[int, int]]:
+    p = _patcher()
+    return _resolved_off(data, p.MIMAN_POS_CHECK_OFFSET, p.MIMAN_POS_CHECK_ORIG)
+
+
+def _leyline_sites(data) -> list[tuple[int, int]]:
+    return _resolved_va(data, leylines.POI_VISIBLE_SITE, leylines.POI_VISIBLE_ORIG)
+
+
+def _miracle_sites(data) -> list[tuple[int, int]]:
+    p = _patcher()
+    return (
+        _off_sites(p.MIRACLE_ADDED_TRAMP, p.MIRACLE_ADDED_ORIG)
+        + _off_sites(p.MIRACLE_STATE_TRAMP, p.MIRACLE_STATE_ORIG)
+        + _off_sites(p.MIRACLE_666_NOP_ADDR, p.MIRACLE_666_ORIG)
+    )
+
+
+def _compendium_sites(data) -> list[tuple[int, int]]:
+    p = _patcher()
+    return _resolved_off(data, p.DEVIL_COST_OFFSET, p.DEVIL_COST_ORIG)
+
+
+def _refill_sites(data) -> list[tuple[int, int]]:
+    return _nextstep_sites()
+
+
+def _stockpile_sites(data) -> list[tuple[int, int]]:
+    return (
+        _nextstep_sites()
+        + _resolved_va(data, gp.ITEM_GET_MAX, gp.ITEM_GET_MAX_ORIG)
+        + _resolved_va(data, gp.ITEM_GET_NUM, gp.ITEM_GET_NUM_ORIG)
+        + [
+            (gp.off(thunk), len(stockpile.MAX_THUNK_ORIG))
+            for thunk in stockpile.MAX_THUNKS
+        ]
+    )
+
+
+def _stockpile_dynamic(data) -> list[tuple[int, int]]:
+    return [
+        (stockpile._file_off(data, slot), 8) for slot, _thunk in stockpile.MAX_SLOTS
+    ]
+
+
+def _jump_sites(data) -> list[tuple[int, int]]:
+    return [
+        site
+        for address, original in gp.JUMP_SITES
+        for site in _resolved_va(data, address, original)
+    ]
+
+
+def _magatsuhi_sites(data) -> list[tuple[int, int]]:
+    return _nextstep_sites()
+
+
+def _intro_sites(data) -> list[tuple[int, int]]:
+    return _resolved_va(data, gp.TITLE_TICK_IMPL, gp.TITLE_TICK_ORIG)
+
+
+def _newborn_sites(data) -> list[tuple[int, int]]:
+    return [(gp.off(newborn.RENEWAL_JMP), 5)]
+
+
+def _autosave_sites(data) -> list[tuple[int, int]]:
+    return _nextstep_sites() + [
+        (gp.off(autosave.FIELD_TICK_SITE), 5),
+        (gp.off(autosave.SAVE_BUILD_SITE), 5),
+    ]
+
+
+@dataclass(frozen=True)
+class Feature:
+    """One patch feature: its flag, patch entry point, sites and data pak."""
+
+    key: str
+    label: str
+    flags: tuple[str, ...]
+    apply: str
+    sites: Callable[[bytes | bytearray], list[tuple[int, int]]] | None = None
+    dynamic: Callable[[bytes | bytearray], list[tuple[int, int]]] | None = None
+    pak: str | None = None
+
+
+FEATURES = (
+    Feature(
+        "essences",
+        "Reusable Essences",
+        ("--no-essences",),
+        "patcher:essences",
+        _essences_sites,
+    ),
+    Feature("heal", "Leyline Auto-Heal", ("--no-heal",), "patcher:heal", _heal_sites),
+    Feature("mimans", "Miman Reveal", ("--no-mimans",), "patcher:mimans", _miman_sites),
+    Feature(
+        "leylines",
+        "Leyline Founts on Map",
+        ("--leylines", "--reveal"),
+        "leylines.patch_leylines",
+        _leyline_sites,
+    ),
+    Feature(
+        "miracles",
+        "NG+ Miracles",
+        ("--no-miracles",),
+        "patcher:miracles",
+        _miracle_sites,
+        pak=MIRACLE_PAK,
+    ),
+    Feature(
+        "compendium",
+        "Free Compendium",
+        ("--no-compendium",),
+        "patcher:compendium",
+        _compendium_sites,
+    ),
+    Feature(
+        "refill",
+        "Battle Refill",
+        ("--no-refill",),
+        "gameplay_patches.patch_refill",
+        _refill_sites,
+    ),
+    Feature(
+        "stockpile",
+        "Stockpile",
+        ("--stockpile",),
+        "stockpile.patch_stockpile",
+        _stockpile_sites,
+        _stockpile_dynamic,
+        stockpile.STOCK_PAK,
+    ),
+    Feature(
+        "jump",
+        "Superjump",
+        ("--no-jump",),
+        "gameplay_patches.patch_jump",
+        _jump_sites,
+    ),
+    Feature(
+        "magatsuhi",
+        "Full Magatsuhi",
+        ("--no-magatsuhi", "--magatsuhi-chain"),
+        "gameplay_patches.patch_magatsuhi",
+        _magatsuhi_sites,
+    ),
+    Feature(
+        "shop",
+        "Shop stock",
+        (
+            "--no-shop",
+            "--shop-consumables",
+            "--shop-growth",
+            "--shop-essences",
+            "--shop-misc",
+        ),
+        "shop_pak.build_shop_pak",
+        pak=shop_pak.SHOP_PAK,
+    ),
+    Feature(
+        "intro",
+        "Skip Intro",
+        ("--no-intro",),
+        "gameplay_patches.patch_refocus",
+        _intro_sites,
+        pak=boot_pak.BOOT_PAK,
+    ),
+    Feature(
+        "masakado",
+        "Masakado Unlock",
+        ("--no-masakado",),
+        "quest_pak.build_quest_pak",
+        pak=quest_pak.QUEST_PAK,
+    ),
+    Feature(
+        "newborn",
+        "Newborn Clears Compendium",
+        ("--no-newborn",),
+        "newborn.patch_newborn",
+        _newborn_sites,
+        pak=newborn.NEWBORN_PAK,
+    ),
+    Feature(
+        "estoma",
+        "Free Estoma",
+        ("--no-estoma",),
+        "estoma.build_estoma_pak",
+        pak=estoma.ESTOMA_PAK,
+    ),
+    Feature(
+        "reveal",
+        "Map Reveal",
+        ("--reveal",),
+        "reveal.build_reveal_pak",
+        pak=reveal.REVEAL_PAK,
+    ),
+    Feature(
+        "autosave",
+        "Autosave after battle",
+        ("--autosave-slot",),
+        "autosave.patch_autosave",
+        _autosave_sites,
+    ),
+)
+
+FEATURE_KEYS = tuple(feature.key for feature in FEATURES)
+
 # (feature key, data pak) written by the patcher when the feature is enabled.
-FEATURE_PAKS = (
-    ("miracles", MIRACLE_PAK),
-    ("stockpile", stockpile.STOCK_PAK),
-    ("shop", shop_pak.SHOP_PAK),
-    ("intro", boot_pak.BOOT_PAK),
-    ("masakado", quest_pak.QUEST_PAK),
-    ("newborn", newborn.NEWBORN_PAK),
-    ("estoma", estoma.ESTOMA_PAK),
-    ("reveal", reveal.REVEAL_PAK),
+FEATURE_PAKS = tuple(
+    (feature.key, feature.pak) for feature in FEATURES if feature.pak is not None
 )
 
 # Substrings that must appear in `repak list` for each generated pak.
@@ -69,98 +308,38 @@ def validate_pak(repak: str, pak_path: str, feature: str) -> list[str]:
     ]
 
 
-STATIC_FEATURES = (
-    "essences",
-    "heal",
-    "mimans",
-    "leylines",
-    "miracles",
-    "compendium",
-    "refill",
-    "stockpile",
-    "jump",
-    "magatsuhi",
-    "intro",
-    "newborn",
-    "autosave",
+STATIC_FEATURES = tuple(
+    feature.key for feature in FEATURES if feature.sites is not None
 )
 
 
 def static_sites(data: bytes | bytearray) -> dict[str, list[tuple[int, int, bytes]]]:
-    """(offset, length, original) for every site except the dynamic slots."""
-    import patch_smtvv_freeplay as patcher
-
+    """(offset, length, original) for every signature site in the registry."""
     sites: dict[str, list[tuple[int, int, bytes]]] = {}
+    for feature in FEATURES:
+        if feature.sites is None:
+            continue
+        entries = feature.sites(data)
+        if entries:
+            sites[feature.key] = [
+                (offset, length, bytes(data[offset : offset + length]))
+                for offset, length in entries
+            ]
+    return sites
 
-    def add(feature: str, offset: int, length: int) -> None:
-        sites.setdefault(feature, []).append(
-            (offset, length, bytes(data[offset : offset + length]))
-        )
 
-    add("essences", patcher.TRAMP_OFFSET, len(patcher.TRAMP_ORIG))
-    add("heal", patcher.RYUKETSU_TRAMP_OFFSET, len(patcher.RYUKETSU_TRAMP_ORIG))
-    mimans = signatures.resolve(
-        data, patcher.MIMAN_POS_CHECK_OFFSET, patcher.MIMAN_POS_CHECK_ORIG
-    )
-    add(
-        "mimans",
-        mimans if mimans is not None else patcher.MIMAN_POS_CHECK_OFFSET,
-        len(patcher.MIMAN_POS_CHECK_ORIG),
-    )
-    leyline_offset = signatures.resolve(
-        data, gp.off(leylines.POI_VISIBLE_SITE), leylines.POI_VISIBLE_ORIG
-    )
-    add(
-        "leylines",
-        leyline_offset
-        if leyline_offset is not None
-        else gp.off(leylines.POI_VISIBLE_SITE),
-        len(leylines.POI_VISIBLE_ORIG),
-    )
-    add("miracles", patcher.MIRACLE_ADDED_TRAMP, len(patcher.MIRACLE_ADDED_ORIG))
-    add("miracles", patcher.MIRACLE_STATE_TRAMP, len(patcher.MIRACLE_STATE_ORIG))
-    add("miracles", patcher.MIRACLE_666_NOP_ADDR, 6)
-    compendium = signatures.resolve(
-        data, patcher.DEVIL_COST_OFFSET, patcher.DEVIL_COST_ORIG
-    )
-    add(
-        "compendium",
-        compendium if compendium is not None else patcher.DEVIL_COST_OFFSET,
-        len(patcher.DEVIL_COST_ORIG),
-    )
-
-    for thunk in gp.SETNEXTSTEP_THUNKS:
-        offset = gp.off(thunk)
-        for feature in ("refill", "stockpile", "magatsuhi", "autosave"):
-            add(feature, offset, 5)
-    # Only stockpile rewrites the item entry points; refill calls them as-is.
-    for function, original in (
-        (gp.ITEM_GET_MAX, gp.ITEM_GET_MAX_ORIG),
-        (gp.ITEM_GET_NUM, gp.ITEM_GET_NUM_ORIG),
-    ):
-        add("stockpile", gp.off(function), len(original))
-    for thunk in stockpile.MAX_THUNKS:
-        add("stockpile", gp.off(thunk), len(stockpile.MAX_THUNK_ORIG))
-
-    for site, original in gp.JUMP_SITES:
-        resolved = signatures.resolve(data, gp.off(site), original)
-        add(
-            "jump",
-            resolved if resolved is not None else gp.off(site),
-            len(original),
-        )
-
-    intro_offset = signatures.resolve(
-        data, gp.off(gp.TITLE_TICK_IMPL), gp.TITLE_TICK_ORIG
-    )
-    add(
-        "intro",
-        intro_offset if intro_offset is not None else gp.off(gp.TITLE_TICK_IMPL),
-        len(gp.TITLE_TICK_ORIG),
-    )
-    add("newborn", gp.off(newborn.RENEWAL_JMP), 5)
-    add("autosave", gp.off(autosave.FIELD_TICK_SITE), 5)
-    add("autosave", gp.off(autosave.SAVE_BUILD_SITE), 5)
+def verification_sites(
+    data: bytes | bytearray,
+) -> dict[str, list[tuple[int, int, bytes]]]:
+    """Every site a feature changes, including the dynamic table slots."""
+    sites = static_sites(data)
+    for feature in FEATURES:
+        if feature.dynamic is None:
+            continue
+        for offset, length in feature.dynamic(data):
+            sites.setdefault(feature.key, []).append(
+                (offset, length, bytes(data[offset : offset + length]))
+            )
     return sites
 
 

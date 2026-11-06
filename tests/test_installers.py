@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import installer_platform
 import installer_state as state
+import patch_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
 BAT = ROOT / "install.bat"
@@ -45,3 +47,31 @@ def test_package_ships_the_installer_modules():
         "installer_platform.py",
     ):
         assert f'"{name}"' in text
+
+
+def test_registry_covers_every_installer_mod():
+    features = {feature.key: feature for feature in patch_manifest.FEATURES}
+    for mod in state.PATCH_MODS:
+        assert mod.key in features, mod.key
+        flags = set(features[mod.key].flags)
+        for flag in (mod.on_flag, mod.off_flag):
+            if flag:
+                assert flag in flags, (mod.key, flag)
+
+
+def test_every_registry_flag_is_accepted_by_the_patcher():
+    text = (ROOT / "patch_smtvv_freeplay.py").read_text(encoding="utf-8")
+    for feature in patch_manifest.FEATURES:
+        for flag in feature.flags:
+            if flag.startswith("--shop-"):
+                # The category flags are generated in a loop.
+                assert '"--shop-' in text, flag
+                continue
+            assert f'"{flag}"' in text, (feature.key, flag)
+
+
+def test_registry_paks_are_installed_by_the_installer():
+    installed = set(installer_platform.INSTALLED_PAKS)
+    for feature in patch_manifest.FEATURES:
+        if feature.pak is not None:
+            assert feature.pak in installed, feature.pak

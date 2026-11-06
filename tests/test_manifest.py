@@ -211,3 +211,49 @@ def test_verification_groups_match_the_sites_each_feature_patches():
     assert gp.off(gp.ITEM_GET_MAX) in stockpile_offsets
     assert gp.off(gp.ITEM_GET_NUM) in stockpile_offsets
     assert gp.off(gp.ITEM_GET) not in stockpile_offsets
+
+
+def test_every_setnextstep_patcher_verifies_the_thunk():
+    import gameplay_patches as gp
+
+    sites = patch_manifest.static_sites(bytearray(0x1800))
+    expected = {gp.off(thunk) for thunk in gp.SETNEXTSTEP_THUNKS}
+    for feature in ("refill", "stockpile", "magatsuhi", "autosave"):
+        offsets = {offset for offset, _len, _orig in sites[feature]}
+        assert expected <= offsets, feature
+
+
+def test_feature_registry_keys_are_unique_and_ordered():
+    assert len(patch_manifest.FEATURE_KEYS) == len(set(patch_manifest.FEATURE_KEYS))
+    assert patch_manifest.FEATURE_KEYS == tuple(
+        feature.key for feature in patch_manifest.FEATURES
+    )
+    assert set(patch_manifest.STATIC_FEATURES) <= set(patch_manifest.FEATURE_KEYS)
+
+
+def test_feature_apply_paths_resolve():
+    import importlib
+
+    for feature in patch_manifest.FEATURES:
+        if feature.apply.startswith("patcher:"):
+            assert feature.apply.split(":", 1)[1]
+            continue
+        module_name, _, function_name = feature.apply.partition(".")
+        assert module_name and function_name, feature.apply
+        module = importlib.import_module(module_name)
+        assert callable(getattr(module, function_name)), feature.apply
+
+
+def test_feature_paks_are_unique_and_owned_by_a_feature():
+    paks = [pak for _key, pak in patch_manifest.FEATURE_PAKS]
+    assert len(paks) == len(set(paks))
+    for feature in patch_manifest.FEATURES:
+        if feature.pak is not None:
+            assert (feature.key, feature.pak) in patch_manifest.FEATURE_PAKS
+
+
+def test_every_feature_pak_has_a_validation_entry():
+    paks = {
+        feature.key for feature in patch_manifest.FEATURES if feature.pak is not None
+    }
+    assert paks == set(patch_manifest.PAK_ENTRIES)

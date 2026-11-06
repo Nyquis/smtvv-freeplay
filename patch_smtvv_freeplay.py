@@ -99,7 +99,7 @@ from patch_manifest import LEGACY_MAP_PAK, MIRACLE_PAK
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.20.1"
+MOD_VERSION = "5.21.0"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -704,14 +704,8 @@ def _choose_source(
 def _verification_sites(
     data: bytes | bytearray,
 ) -> dict[str, list[tuple[int, int, bytes]]]:
-    """Original bytes at every site a feature is expected to change."""
-    sites = patch_manifest.static_sites(data)
-    for slot, _thunk in stockpile.MAX_SLOTS:
-        offset = stockpile._file_off(data, slot)
-        sites.setdefault("stockpile", []).append(
-            (offset, 8, bytes(data[offset : offset + 8]))
-        )
-    return sites
+    """Every site a feature is expected to change, from the feature registry."""
+    return patch_manifest.verification_sites(data)
 
 
 def _verify_patched(
