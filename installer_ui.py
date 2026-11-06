@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import sys
+import textwrap
 
 RESET = "\x1b[0m"
 BOLD = "\x1b[1m"
@@ -33,9 +34,8 @@ def _enable_windows_vt() -> bool:
     try:
         import ctypes
     except ImportError:
-        # The bundled embeddable runtime ships without _ctypes. Windows
-        # Terminal and friends still render ANSI; a classic console falls
-        # back to a clear-and-redraw interface without escape codes.
+        # A runtime without _ctypes can still run in a terminal that parses
+        # ANSI; a classic console falls back to clear-and-redraw.
         return _windows_terminal_hint()
     try:
         kernel32 = ctypes.windll.kernel32
@@ -54,7 +54,7 @@ def _unicode_ok() -> bool:
 
 
 class Console:
-    """Colour and width decisions for one terminal."""
+    """Colour, size and redraw decisions for one terminal."""
 
     def __init__(self) -> None:
         self.tty = sys.stdin.isatty() and sys.stdout.isatty()
@@ -64,6 +64,9 @@ class Console:
 
     def width(self) -> int:
         return max(40, min(100, shutil.get_terminal_size((80, 24)).columns))
+
+    def height(self) -> int:
+        return max(16, shutil.get_terminal_size((80, 24)).lines)
 
     def style(self, text: str, *codes: str) -> str:
         if not self.color or not codes:
@@ -115,11 +118,51 @@ def _visible(text: str) -> int:
     return len(_ANSI.sub("", text))
 
 
+def _pad(text: str, width: int) -> str:
+    gap = max(0, width - _visible(text))
+    return text + " " * gap
+
+
 def _fit(text: str, width: int) -> str:
     if _visible(text) <= width:
         return text
     plain = _ANSI.sub("", text)
     return plain[: width - 3] + "..."
+
+
+def wrap_text(text: str, width: int) -> list[str]:
+    return textwrap.wrap(text, max(10, width)) or [""]
+
+
+def framed(
+    console: Console,
+    title: str,
+    body: list[str],
+    footer: list[str],
+    right: str = "",
+) -> list[str]:
+    """Draw a box around body lines, padded to a common visible width."""
+    width = min(console.width(), 100)
+    inner = width - 4
+    if console.unicode:
+        tl, tr, bl, br = "╭", "╮", "╰", "╯"
+        hor, ver, ml, mr = "─", "│", "├", "┤"
+    else:
+        tl = tr = bl = br = ml = mr = "+"
+        hor, ver = "-", "|"
+
+    head = f"{hor} {title} "
+    tail = f" {right} " if right else hor
+    dashes = max(0, width - 2 - _visible(head) - _visible(tail))
+    lines = [tl + head + hor * dashes + tail + tr]
+    for line in body:
+        lines.append(f"{ver} {_pad(_fit(line, inner), inner)} {ver}")
+    if footer:
+        lines.append(ml + hor * (width - 2) + mr)
+        for line in footer:
+            lines.append(f"{ver} {_pad(_fit(line, inner), inner)} {ver}")
+    lines.append(bl + hor * (width - 2) + br)
+    return lines
 
 
 class Screen:
@@ -128,7 +171,6 @@ class Screen:
     def __init__(self, console: Console) -> None:
         self.console = console
         self.lines = 0
-        self.chrome: list[str] = []
 
     def begin(self) -> None:
         self.lines = 0
@@ -139,8 +181,6 @@ class Screen:
 
     def draw(self, lines: list[str]) -> None:
         width = self.console.width()
-        if self.console.tty and self.chrome:
-            lines = [*self.chrome, ""] + lines
         lines = [_fit(line, width) for line in lines]
         if not self.console.tty:
             for line in lines:
@@ -227,9 +267,16 @@ def read_key(console: Console) -> str:
         termios.tcsetattr(descriptor, termios.TCSADRAIN, old)
 
 
-def _plain_toggle(console: Console, mods, selected: dict[str, bool]) -> None:
-    console.write("  Toggle by number, one per line. Blank line to continue.")
-    console.write("  " + "  ".join(f"{i + 1}={mod.key}" for i, mod in enumerate(mods)))
+def plain_toggle(console: Console, mods, selected: dict[str, bool]) -> None:
+    """Line-mode checklist for terminals without a TUI."""
+    console.write("  Mods (numbers toggle; blank line continues):")
+    for index, mod in enumerate(mods, 1):
+        console.write(
+            f"   {index:2d}. [{'x' if selected.get(mod.key) else ' '}] {mod.label}"
+        )
+        console.write(f"       {mod.description}")
+        if mod.warning:
+            console.write(f"       [!] {mod.warning}")
     while True:
         try:
             answer = input("  toggle> ").strip()
@@ -241,134 +288,6 @@ def _plain_toggle(console: Console, mods, selected: dict[str, bool]) -> None:
             if token.isdigit() and 1 <= int(token) <= len(mods):
                 key = mods[int(token) - 1].key
                 selected[key] = not selected.get(key, False)
-
-
-def checklist(
-    console: Console,
-    screen: Screen,
-    title: str,
-    subtitle: str,
-    mods,
-    selected: dict[str, bool],
-    cursor: int = 0,
-) -> None:
-    if not console.tty:
-        _plain_toggle(console, mods, selected)
-        return
-    screen.begin()
-    try:
-        while True:
-            lines = [console.cyan(title), console.dim(subtitle), ""]
-            for index, mod in enumerate(mods):
-                pointer = console.marker() if index == cursor else " "
-                box = "x" if selected.get(mod.key) else " "
-                line = f" {pointer} [{box}] {mod.label}"
-                if mod.detail:
-                    gap = max(2, 34 - _visible(line))
-                    line += " " * gap + console.dim(mod.detail)
-                lines.append(line)
-            lines.append("")
-            lines.append(
-                console.hint(
-                    "  up/down move   space toggle   a all   n none   enter continue   esc cancel"
-                )
-            )
-            screen.draw(lines)
-            key = read_key(console)
-            if key == "up":
-                cursor = (cursor - 1) % len(mods)
-            elif key == "down":
-                cursor = (cursor + 1) % len(mods)
-            elif key == "space":
-                key_name = mods[cursor].key
-                selected[key_name] = not selected.get(key_name, False)
-            elif key == "a":
-                for mod in mods:
-                    selected[mod.key] = True
-            elif key == "n":
-                for mod in mods:
-                    selected[mod.key] = False
-            elif key == "enter":
-                return
-            elif key in ("esc", "q"):
-                raise KeyboardInterrupt
-    finally:
-        screen.end()
-
-
-def radio(
-    console: Console,
-    screen: Screen,
-    title: str,
-    subtitle: str,
-    options: list[tuple[str, str]],
-    index: int,
-) -> int:
-    """Pick one (value, label) option; returns the chosen index."""
-    if not console.tty:
-        console.write(console.cyan(title))
-        for number, (value, label) in enumerate(options, 1):
-            marker = "*" if number - 1 == index else " "
-            console.write(f"  {marker} {number}. {label}")
-        while True:
-            try:
-                answer = input(f"  choice [1-{len(options)}] (Enter keeps): ").strip()
-            except EOFError:
-                return index
-            if not answer:
-                return index
-            if answer.isdigit() and 1 <= int(answer) <= len(options):
-                return int(answer) - 1
-    screen.begin()
-    try:
-        while True:
-            lines = [console.cyan(title), console.dim(subtitle), ""]
-            for position, (_value, label) in enumerate(options):
-                pointer = console.marker() if position == index else " "
-                dot = "o" if position == index else " "
-                lines.append(f" {pointer} ({dot}) {label}")
-            lines.append("")
-            lines.append(console.hint("  up/down choose   enter confirm   esc cancel"))
-            screen.draw(lines)
-            key = read_key(console)
-            if key == "up":
-                index = (index - 1) % len(options)
-            elif key == "down":
-                index = (index + 1) % len(options)
-            elif key == "enter":
-                return index
-            elif key in ("esc", "q"):
-                raise KeyboardInterrupt
-    finally:
-        screen.end()
-
-
-def notice(console: Console, screen: Screen, title: str, text: str) -> bool:
-    """Show a note; Enter continues, Esc goes back."""
-    import textwrap
-
-    width = console.width() - 4
-    paragraphs = textwrap.wrap(text, width)
-    if not console.tty:
-        console.write(console.yellow(title))
-        for line in paragraphs:
-            console.write("  " + line)
-        return True
-    screen.begin()
-    try:
-        while True:
-            lines = [console.yellow(title), ""]
-            lines.extend("  " + line for line in paragraphs)
-            lines.append("")
-            lines.append(console.hint("  enter continue   esc back"))
-            screen.draw(lines)
-            key = read_key(console)
-            if key == "enter":
-                return True
-            if key in ("esc", "q"):
-                return False
-    finally:
-        screen.end()
 
 
 def ask_text(console: Console, prompt: str, default: str = "") -> str:

@@ -24,13 +24,12 @@ again.
 1. Download and **extract** the zip (don't run it from inside the archive).
 2. Close the game.
 3. Double-click **`install.bat`**.
-4. Use the installer: arrow keys move, Space toggles a mod, Enter continues.
-   Then choose Item Hacks (Battle Refill, Stockpile or neither), the Full
-   Magatsuhi mode (every battle, once per chain or game default), an optional
-   autosave slot (1-20), and a shop mode per category (consumables, growth,
-   essences, misc): game default, free with the game's unlock timing, or free
-   and available immediately. A review screen shows the selection before
-   anything is written.
+4. Use the installer. It walks through **Core Mods** (Space toggles; the
+   focused mod's description and warnings are shown below the list),
+   **Gameplay** (Item Hacks, Full Magatsuhi mode, autosave slot), **Shop**
+   (per category: game default, free, or free and immediate), and **Review**
+   (install/change/remove against the current install). Enter continues, Esc
+   goes back; nothing is written before the review.
    Run `install.bat` again later to add or remove mods; installed mods are
    pre-selected and the first screen offers to uninstall everything.
 5. If it can't find the game automatically, paste your SMT5V folder path when
@@ -56,10 +55,10 @@ Only the installer differs.
    ./install.sh
    ```
 
-   The interface is the same as on Windows: arrow keys move, Space toggles a
-   mod, Enter continues, then the Item Hacks, Magatsuhi, autosave and shop
-   screens follow. Run it again later to add or remove mods; installed mods are
-   pre-selected and the first screen offers to uninstall everything.
+   The interface is the same as on Windows: Core Mods, Gameplay, Shop and
+   Review, with Enter to continue and Esc to go back. Run it again later to add
+   or remove mods; installed mods are pre-selected and the first screen offers
+   to uninstall everything.
 
    If the script can't find the game automatically, it will ask you to paste your
    SMT5V folder path.

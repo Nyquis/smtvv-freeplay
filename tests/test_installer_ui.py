@@ -43,6 +43,31 @@ def test_fit_truncates_long_lines():
     assert ui._fit("abcdefghij", 6) == "abc..."
 
 
+def _plain_console():
+    console = ui.Console()
+    console.tty = True
+    console.ansi = False
+    console.color = False
+    console.unicode = False
+    return console
+
+
+def test_framed_ascii_lines_share_a_width():
+    lines = ui.framed(_plain_console(), "Step 1", ["one", "two"], ["hint"])
+    assert len({ui._visible(line) for line in lines}) == 1
+    assert lines[0].startswith("+")
+    assert lines[-1].startswith("+")
+
+
+def test_framed_unicode_uses_box_drawing():
+    console = _plain_console()
+    console.unicode = True
+    lines = ui.framed(console, "Step 1", ["one"], [])
+    assert lines[0].startswith("╭")
+    assert lines[-1].endswith("╯")
+    assert len({ui._visible(line) for line in lines}) == 1
+
+
 def test_windows_terminal_hint_detects_known_terminals(monkeypatch):
     for name in ("WT_SESSION", "ANSICON", "ConEmuANSI", "TERM_PROGRAM"):
         monkeypatch.delenv(name, raising=False)

@@ -2,7 +2,7 @@
 
 Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
 
-**Current version: 5.13.2**
+**Current version: 5.14.0**
 
 ## Features
 
@@ -107,11 +107,12 @@ See **[INSTALL.md](INSTALL.md)** for the full step-by-step. Quick version below.
 
 2. Double-click `install.bat`.
 
-3. Use the installer: arrow keys move, Space toggles a mod, Enter continues.
-   Then pick Item Hacks (Battle Refill or Stockpile), the Full Magatsuhi mode
-   (every battle, once per chain, or game default), an optional autosave slot,
-   and a shop mode per category. A review screen shows the selection before
-   anything is written.
+3. Use the installer. It walks through four screens: **Core Mods** (Space
+   toggles; the focused mod's description and any warning appear below the
+   list), **Gameplay** (Item Hacks, Full Magatsuhi mode, autosave slot),
+   **Shop** (a mode per category), and **Review** (what will be installed,
+   changed or removed). Enter continues, Esc goes back. The review is the
+   first point at which anything is written.
 
    Run `install.bat` again later to add or remove mods: installed mods are
    pre-selected, and the first screen offers to uninstall everything.
