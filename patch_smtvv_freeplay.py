@@ -98,7 +98,7 @@ from patch_manifest import LEGACY_MAP_PAK, MIRACLE_PAK
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.16.4"
+MOD_VERSION = "5.16.5"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -876,8 +876,14 @@ def main() -> None:
         "reveal": do_reveal,
     }
 
+    cave_budget: dict[str, int] = {}
+    cave_mark = 0
+
     def ok(key: str) -> None:
+        nonlocal cave_mark
         results[key] = True
+        cave_budget[key] = next_cave_off - cave_mark
+        cave_mark = next_cave_off
 
     def fail(key: str) -> None:
         if key not in failed:
@@ -1012,6 +1018,7 @@ def main() -> None:
     ):
         _assert_writable(data, addr, label)
     next_cave_off = cave_off
+    cave_mark = cave_off
     patch_num = 0
     enabled = [
         n
@@ -1607,6 +1614,16 @@ def main() -> None:
         except RuntimeError as exc:
             print(f"    WARNING: map reveal pak not built - {exc}")
             fail("reveal")
+
+    if cave_budget:
+        print()
+        print("  Cave budget (main code cave):")
+        for key in sorted(
+            cave_budget, key=lambda name: cave_budget[name], reverse=True
+        ):
+            print(f"    {key:<14} {cave_budget[key]:>5} bytes")
+        free = max(0, cave_off + cave_len - next_cave_off)
+        print(f"    {'free':<14} {free:>5} bytes")
 
     failed_selected = [key for key in failed if selected.get(key)]
     if check:
