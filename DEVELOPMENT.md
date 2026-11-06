@@ -69,7 +69,7 @@ the review screen and the `--check` preflight pass.
 
 | Interpreter | Purpose |
 | --- | --- |
-| `python\python.exe` (Windows) / `python3` (Linux) | **Shipped** runtime used by the installers and end users. Do not remove or replace it. |
+| `python\python.exe` (Windows) / `python3` (Linux) | **Shipped** runtime used by the installers and end users. Do not remove or replace it; `python/RUNTIME.md` records its source, hash and strip list. |
 | `pixi run python` | **Development** interpreter (3.12.x from conda-forge) |
 
 The patcher is stdlib-only, so there are no dependencies to keep in sync
