@@ -175,7 +175,7 @@ DEVIL_COST_ORIG = bytes.fromhex("4c8bdc49894b0841574881ecc0000000")
 
 
 def file_to_va(foff: int) -> int:
-    return RDATA_VA + (foff - RDATA_RAW)
+    return gameplay_patches.va(foff)
 
 
 IMAGE_SCN_MEM_EXECUTE = 0x20000000
@@ -1028,6 +1028,7 @@ def main() -> None:
     print(f"  Reading {os.path.basename(source)} ...")
     with open(source, "rb") as fh:
         data = bytearray(fh.read())
+    gameplay_patches.set_image_layout(data)
     print(f"  File size: {len(data):,} bytes")
     verify_sites = _verification_sites(data)
 

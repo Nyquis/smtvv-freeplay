@@ -127,3 +127,17 @@ def test_rejects_a_non_executable_section():
     header = 0x80 + 24 + 0xE0
     struct.pack_into("<I", data, header + 36, 0x40000040)  # read only
     assert patcher.find_cc_cave(data, min_size=64) is None
+
+
+def test_section_mapping_round_trips_and_falls_back():
+    data = _pe_with_code()
+    gp.set_image_layout(data)
+    try:
+        assert gp.off(0x140001000) == 0x600
+        assert gp.off(0x140001234) == 0x834
+        assert gp.va(0x700) == 0x140001100
+        assert patcher.file_to_va(0x700) == 0x140001100
+    finally:
+        gp.set_image_layout(bytearray())
+    outside = 0x140C2C2D0
+    assert gp.off(outside) == outside - gp.RDATA_VA + gp.RDATA_RAW

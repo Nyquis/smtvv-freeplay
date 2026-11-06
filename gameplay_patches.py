@@ -30,11 +30,45 @@ def _range_has_reference(base_va: int, length: int) -> bool:
     return i < len(CAVE_REFS) and CAVE_REFS[i] < base_va + length
 
 
+# (raw offset, raw size, RVA, virtual size) for every PE section; filled from
+# the loaded executable so sites outside .rdata map correctly. Empty means the
+# legacy .rdata-only mapping used by synthetic tests.
+IMAGE_SECTIONS: list[tuple[int, int, int, int]] = []
+
+
+def set_image_layout(data) -> None:
+    """Record the section table of the executable being patched."""
+    global IMAGE_SECTIONS
+    IMAGE_SECTIONS = []
+    if len(data) < 0x40:
+        return
+    try:
+        pe = struct.unpack_from("<I", data, 0x3C)[0]
+        count = struct.unpack_from("<H", data, pe + 6)[0]
+        opt = struct.unpack_from("<H", data, pe + 20)[0]
+        base = pe + 24 + opt
+        sections = []
+        for index in range(count):
+            header = base + 40 * index
+            vsize, rva, rsize, raw = struct.unpack_from("<IIII", data, header + 8)
+            sections.append((raw, rsize, rva, vsize))
+    except (struct.error, IndexError):
+        return
+    IMAGE_SECTIONS = sections
+
+
 def va(foff: int) -> int:
+    for raw, rsize, rva, _vsize in IMAGE_SECTIONS:
+        if raw <= foff < raw + rsize:
+            return IMAGE_BASE + rva + (foff - raw)
     return RDATA_VA + (foff - RDATA_RAW)
 
 
 def off(v: int) -> int:
+    rva = v - IMAGE_BASE
+    for raw, rsize, srva, vsize in IMAGE_SECTIONS:
+        if srva <= rva < srva + max(vsize, rsize):
+            return raw + (rva - srva)
     return v - RDATA_VA + RDATA_RAW
 
 
