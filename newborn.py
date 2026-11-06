@@ -26,6 +26,7 @@ NEWBORN_SOURCE_PAK = "pakchunk0-WindowsNoEditor.pak"
 INHERIT_TEXT = "Project/Content/L10N/en/Blueprints/Gamedata/BinTable/Inherit/InheritMessage"
 
 RENEWAL_JMP = 0x140CB73E3        # exec thunk: jmp InitRenewalNewGame impl
+RENEWAL_JMP_ORIG = bytes.fromhex("e938bbe6ff")
 RENEWAL_IMPL = 0x140B22F20
 RENEWAL_IMPL_ORIG = bytes.fromhex("48895c24084889742410")
 BOOK_RESET = 0x140B1C260         # resets SaveData+0x5A8 to 1201 default records

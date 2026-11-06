@@ -99,7 +99,7 @@ from patch_manifest import LEGACY_MAP_PAK, MIRACLE_PAK
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.19.0"
+MOD_VERSION = "5.20.0"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -159,6 +159,7 @@ MIRACLE_STATE_ORIG = bytes([0xE9, 0x5B, 0xEB, 0x88, 0x06])
 
 # Hardcoded "cmp ecx, 666; je BLOCK" that hides Divine Persuasion
 MIRACLE_666_NOP_ADDR = 0x00551AEE  # 6-byte JE instruction to NOP
+MIRACLE_666_ORIG = bytes.fromhex("0f84d9010000")
 
 # Miracle IDs/enums to force-unlock (both 0-based and 1-based to cover
 # all code paths: some functions use enum=ID-1, others use raw ID)
@@ -978,6 +979,11 @@ def main() -> None:
     with open(source, "rb") as fh:
         data = bytearray(fh.read())
     gameplay_patches.set_image_layout(data)
+    relocation_notes = patch_manifest.relocate(data)
+    if relocation_notes:
+        print("  Relocation   : some sites could not be resolved")
+        for note in relocation_notes:
+            print(f"    {note}")
     print(f"  File size: {len(data):,} bytes")
     verify_sites = _verification_sites(data)
 

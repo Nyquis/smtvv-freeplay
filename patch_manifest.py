@@ -168,3 +168,175 @@ def static_sites(data: bytes | bytearray) -> dict[str, list[tuple[int, int, byte
     add("autosave", gp.off(autosave.FIELD_TICK_SITE), 5)
     add("autosave", gp.off(autosave.SAVE_BUILD_SITE), 5)
     return sites
+
+
+def _relocate_off(data, module, name: str, original: bytes, label: str, notes):
+    """Resolve a file-offset site and write it back to the module."""
+    known = getattr(module, name)
+    resolved = signatures.resolve(data, known, original)
+    if resolved is None:
+        notes.append(f"{label}: signature not unique or missing")
+        return False
+    setattr(module, name, resolved)
+    return True
+
+
+def _relocate_va(data, module, name: str, original: bytes, label: str, notes):
+    """Resolve a VA site and write the new VA back to the module."""
+    known = getattr(module, name)
+    resolved = signatures.resolve(data, gp.off(known), original)
+    if resolved is None:
+        notes.append(f"{label}: signature not unique or missing")
+        return False
+    setattr(module, name, gp.va(resolved))
+    return True
+
+
+def _relocate_va_list(data, module, name: str, original: bytes, label: str, notes):
+    """Resolve every VA in a list, updating the list in place so aliases see it."""
+    entries = getattr(module, name)
+    moved = []
+    ok = True
+    for known in entries:
+        resolved = signatures.resolve(data, gp.off(known), original)
+        if resolved is None:
+            notes.append(f"{label}: signature not unique or missing")
+            moved.append(known)
+            ok = False
+        else:
+            moved.append(gp.va(resolved))
+    entries[:] = moved
+    return ok
+
+
+def _derive_target(data, module, site_name: str, target_name: str) -> None:
+    """Point a call/jump target at the address the resolved site now reaches."""
+    site = getattr(module, site_name)
+    disp = int.from_bytes(
+        bytes(data[gp.off(site) + 1 : gp.off(site) + 5]), "little", signed=True
+    )
+    setattr(module, target_name, site + 5 + disp)
+
+
+def relocate(data: bytes | bytearray) -> list[str]:
+    """Resolve every remaining patch site by its unique signature.
+
+    Sites that still match their known offset keep it. When a site has moved,
+    its module constant (and every imported alias that caches the value) is
+    rewritten before verification and patching run. Ambiguous or missing
+    signatures are left at their known address so the feature's own guard can
+    fail safely. Returns human-readable notes for unresolved sites.
+    """
+    import patch_smtvv_freeplay as patcher
+
+    notes: list[str] = []
+
+    # File-offset sites in the main patcher.
+    _relocate_off(data, patcher, "TRAMP_OFFSET", patcher.TRAMP_ORIG, "essences", notes)
+    _relocate_off(
+        data,
+        patcher,
+        "RYUKETSU_TRAMP_OFFSET",
+        patcher.RYUKETSU_TRAMP_ORIG,
+        "heal",
+        notes,
+    )
+    _relocate_off(
+        data,
+        patcher,
+        "MIRACLE_ADDED_TRAMP",
+        patcher.MIRACLE_ADDED_ORIG,
+        "miracles.added",
+        notes,
+    )
+    _relocate_off(
+        data,
+        patcher,
+        "MIRACLE_STATE_TRAMP",
+        patcher.MIRACLE_STATE_ORIG,
+        "miracles.state",
+        notes,
+    )
+    _relocate_off(
+        data,
+        patcher,
+        "MIRACLE_666_NOP_ADDR",
+        patcher.MIRACLE_666_ORIG,
+        "miracles.nop666",
+        notes,
+    )
+
+    # Shared item helpers and the SetNextStep thunk (also used by stockpile and
+    # autosave through the same list object).
+    _relocate_va_list(
+        data, gp, "SETNEXTSTEP_THUNKS", gp.SETNEXTSTEP_ORIG, "setnextstep", notes
+    )
+    for name, original in (
+        ("ITEM_GET", gp.ITEM_GET_ORIG),
+        ("ITEM_GET_MAX", gp.ITEM_GET_MAX_ORIG),
+        ("ITEM_GET_NUM", gp.ITEM_GET_NUM_ORIG),
+        ("ITEM_IS_GOTTEN", gp.ITEM_IS_GOTTEN_ORIG),
+    ):
+        _relocate_va(data, gp, name, original, name.lower(), notes)
+
+    # stockpile imports the item helpers by name; keep its aliases in sync.
+    stockpile.ITEM_GET_MAX = gp.ITEM_GET_MAX
+    stockpile.ITEM_GET_NUM = gp.ITEM_GET_NUM
+    _relocate_va_list(
+        data,
+        stockpile,
+        "MAX_THUNKS",
+        stockpile.MAX_THUNK_ORIG,
+        "stockpile.max_thunks",
+        notes,
+    )
+
+    # Autosave sites and the functions its hooks call.
+    if _relocate_va(
+        data,
+        autosave,
+        "SAVE_BUILD_SITE",
+        autosave.SAVE_BUILD_ORIG,
+        "autosave.save_build",
+        notes,
+    ):
+        _derive_target(data, autosave, "SAVE_BUILD_SITE", "SAVE_BUILD_FN")
+    _relocate_va(
+        data,
+        autosave,
+        "SAVE_SLOT_NATIVE",
+        autosave.SAVE_SLOT_ORIG,
+        "autosave.save_slot",
+        notes,
+    )
+    # FIELD_TICK_ORIG is not unique (the same call shape recurs), so this stays
+    # a guard-only site that fails safely if a game update moves it.
+    if _relocate_va(
+        data,
+        autosave,
+        "FIELD_TICK_SITE",
+        autosave.FIELD_TICK_ORIG,
+        "autosave.field_tick",
+        notes,
+    ):
+        _derive_target(data, autosave, "FIELD_TICK_SITE", "FIELD_TICK_FN")
+
+    # Newborn: the entry thunk and the compendium reset it calls.
+    if _relocate_va(
+        data,
+        newborn,
+        "RENEWAL_JMP",
+        newborn.RENEWAL_JMP_ORIG,
+        "newborn.renewal_jmp",
+        notes,
+    ):
+        _derive_target(data, newborn, "RENEWAL_JMP", "RENEWAL_IMPL")
+    _relocate_va(
+        data,
+        newborn,
+        "BOOK_RESET",
+        newborn.BOOK_RESET_ORIG,
+        "newborn.book_reset",
+        notes,
+    )
+    return notes

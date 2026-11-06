@@ -2,7 +2,55 @@
 
 from __future__ import annotations
 
+import pytest
+
 import patch_manifest
+
+
+@pytest.fixture
+def synthetic_layout(monkeypatch):
+    """Treat VA and file offset as the same value, and restore relocated globals."""
+    import autosave
+    import gameplay_patches as gp
+    import newborn
+    import patch_smtvv_freeplay as patcher
+    import stockpile
+
+    monkeypatch.setattr(gp, "off", lambda value: value)
+    monkeypatch.setattr(gp, "va", lambda value: value)
+    for module, names in (
+        (
+            patcher,
+            (
+                "TRAMP_OFFSET",
+                "RYUKETSU_TRAMP_OFFSET",
+                "MIRACLE_ADDED_TRAMP",
+                "MIRACLE_STATE_TRAMP",
+                "MIRACLE_666_NOP_ADDR",
+            ),
+        ),
+        (gp, ("ITEM_GET", "ITEM_GET_MAX", "ITEM_GET_NUM", "ITEM_IS_GOTTEN")),
+        (
+            autosave,
+            (
+                "SAVE_BUILD_SITE",
+                "SAVE_BUILD_FN",
+                "SAVE_SLOT_NATIVE",
+                "FIELD_TICK_SITE",
+                "FIELD_TICK_FN",
+            ),
+        ),
+        (newborn, ("RENEWAL_JMP", "RENEWAL_IMPL", "BOOK_RESET")),
+        (stockpile, ("ITEM_GET_MAX", "ITEM_GET_NUM")),
+    ):
+        for name in names:
+            monkeypatch.setattr(module, name, getattr(module, name))
+
+    thunks = list(gp.SETNEXTSTEP_THUNKS)
+    max_thunks = list(stockpile.MAX_THUNKS)
+    yield
+    gp.SETNEXTSTEP_THUNKS[:] = thunks
+    stockpile.MAX_THUNKS[:] = max_thunks
 
 
 def test_feature_paks_are_unique_and_named():
@@ -102,3 +150,50 @@ def test_static_sites_relocate_intro():
     data[0xC00 : 0xC00 + len(gp.TITLE_TICK_ORIG)] = gp.TITLE_TICK_ORIG
     sites = patch_manifest.static_sites(data)
     assert sites["intro"][0][0] == 0xC00
+
+
+def test_relocate_rewrites_sites_and_aliases(synthetic_layout):
+    import autosave
+    import gameplay_patches as gp
+    import newborn
+    import patch_smtvv_freeplay as patcher
+    import stockpile
+
+    data = bytearray(0x1000)
+    placed = {
+        0x100: patcher.TRAMP_ORIG,
+        0x200: gp.ITEM_GET_MAX_ORIG,
+        0x300: gp.SETNEXTSTEP_ORIG,
+        0x380: gp.ITEM_GET_NUM_ORIG,
+        0x400: newborn.RENEWAL_JMP_ORIG,
+        0x480: autosave.SAVE_BUILD_ORIG,
+    }
+    for offset, original in placed.items():
+        data[offset : offset + len(original)] = original
+
+    notes = patch_manifest.relocate(data)
+
+    assert patcher.TRAMP_OFFSET == 0x100
+    assert gp.ITEM_GET_MAX == 0x200
+    assert gp.SETNEXTSTEP_THUNKS == [0x300]
+    assert stockpile.SETNEXTSTEP_THUNKS is gp.SETNEXTSTEP_THUNKS
+    assert stockpile.ITEM_GET_MAX == 0x200
+    assert stockpile.ITEM_GET_NUM == 0x380
+    assert autosave.SAVE_BUILD_SITE == 0x480
+    dispatch = int.from_bytes(newborn.RENEWAL_JMP_ORIG[1:5], "little", signed=True)
+    assert newborn.RENEWAL_IMPL == 0x400 + 5 + dispatch
+    assert not any("essences" in note for note in notes)
+
+
+def test_relocate_reports_an_ambiguous_site(synthetic_layout):
+    import autosave
+
+    known = autosave.FIELD_TICK_SITE
+    data = bytearray(0x1000)
+    data[0x100 : 0x100 + len(autosave.FIELD_TICK_ORIG)] = autosave.FIELD_TICK_ORIG
+    data[0x200 : 0x200 + len(autosave.FIELD_TICK_ORIG)] = autosave.FIELD_TICK_ORIG
+
+    notes = patch_manifest.relocate(data)
+
+    assert any("autosave.field_tick" in note for note in notes)
+    assert autosave.FIELD_TICK_SITE == known
