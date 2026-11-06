@@ -81,6 +81,16 @@ def locate(
     return None
 
 
+def resolve(data: bytes | bytearray, known_offset: int, original: bytes) -> int | None:
+    """Known offset when unchanged, otherwise its unique byte match."""
+    if bytes(data[known_offset : known_offset + len(original)]) == original:
+        return known_offset
+    positions = count_occurrences(data, original, limit=2)
+    if len(positions) == 1:
+        return positions[0]
+    return None
+
+
 def summarise(report: dict[str, list[SiteAudit]]) -> tuple[int, int]:
     """(unique sites, total sites)."""
     entries = [entry for group in report.values() for entry in group]

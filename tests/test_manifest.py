@@ -18,3 +18,16 @@ def test_static_sites_cover_every_feature():
         assert feature in sites
         assert sites[feature]
         assert all(length > 0 for _offset, length, _original in sites[feature])
+
+
+def test_static_sites_relocate_simple_features():
+    import patch_smtvv_freeplay as patcher
+
+    data = bytearray(0x2000)
+    data[0x800 : 0x800 + len(patcher.MIMAN_POS_CHECK_ORIG)] = (
+        patcher.MIMAN_POS_CHECK_ORIG
+    )
+    data[0x900 : 0x900 + len(patcher.DEVIL_COST_ORIG)] = patcher.DEVIL_COST_ORIG
+    sites = patch_manifest.static_sites(data)
+    assert sites["mimans"][0][0] == 0x800
+    assert sites["compendium"][0][0] == 0x900

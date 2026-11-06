@@ -49,3 +49,18 @@ def test_locate_returns_a_unique_start():
 def test_locate_rejects_an_ambiguous_signature():
     data = bytearray(b"..DUP.." + b"-" * 4 + b"..DUP..")
     assert signatures.locate(data, 2, 3, margin=2) is None
+
+
+def test_resolve_keeps_a_matching_site():
+    data = bytearray(b"..UNIQUE.." + b"-" * 8)
+    assert signatures.resolve(data, 2, b"UNIQUE") == 2
+
+
+def test_resolve_relocates_a_unique_site():
+    data = bytearray(b"x" * 32 + b"UNIQUE" + b"y" * 32)
+    assert signatures.resolve(data, 0, b"UNIQUE") == 32
+
+
+def test_resolve_rejects_an_ambiguous_site():
+    data = bytearray(b"UNIQUE" + b"-" * 4 + b"UNIQUE")
+    assert signatures.resolve(data, 100, b"UNIQUE") is None

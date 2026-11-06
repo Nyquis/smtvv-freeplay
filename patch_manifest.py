@@ -16,6 +16,7 @@ import newborn
 import quest_pak
 import reveal
 import shop_pak
+import signatures
 import stockpile
 
 MIRACLE_PAK = "pakchunk99_NGPlusMiracles_P.pak"
@@ -63,7 +64,14 @@ def static_sites(data: bytes | bytearray) -> dict[str, list[tuple[int, int, byte
 
     add("essences", patcher.TRAMP_OFFSET, len(patcher.TRAMP_ORIG))
     add("heal", patcher.RYUKETSU_TRAMP_OFFSET, len(patcher.RYUKETSU_TRAMP_ORIG))
-    add("mimans", patcher.MIMAN_POS_CHECK_OFFSET, len(patcher.MIMAN_POS_CHECK_ORIG))
+    mimans = signatures.resolve(
+        data, patcher.MIMAN_POS_CHECK_OFFSET, patcher.MIMAN_POS_CHECK_ORIG
+    )
+    add(
+        "mimans",
+        mimans if mimans is not None else patcher.MIMAN_POS_CHECK_OFFSET,
+        len(patcher.MIMAN_POS_CHECK_ORIG),
+    )
     add(
         "leylines",
         gp.off(leylines.POI_VISIBLE_SITE),
@@ -72,7 +80,14 @@ def static_sites(data: bytes | bytearray) -> dict[str, list[tuple[int, int, byte
     add("miracles", patcher.MIRACLE_ADDED_TRAMP, len(patcher.MIRACLE_ADDED_ORIG))
     add("miracles", patcher.MIRACLE_STATE_TRAMP, len(patcher.MIRACLE_STATE_ORIG))
     add("miracles", patcher.MIRACLE_666_NOP_ADDR, 6)
-    add("compendium", patcher.DEVIL_COST_OFFSET, len(patcher.DEVIL_COST_ORIG))
+    compendium = signatures.resolve(
+        data, patcher.DEVIL_COST_OFFSET, patcher.DEVIL_COST_ORIG
+    )
+    add(
+        "compendium",
+        compendium if compendium is not None else patcher.DEVIL_COST_OFFSET,
+        len(patcher.DEVIL_COST_ORIG),
+    )
 
     for thunk in gp.SETNEXTSTEP_THUNKS:
         offset = gp.off(thunk)

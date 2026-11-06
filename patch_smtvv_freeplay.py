@@ -99,7 +99,7 @@ from patch_manifest import LEGACY_MAP_PAK, MIRACLE_PAK
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.16.7"
+MOD_VERSION = "5.17.0"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -1159,18 +1159,20 @@ def main() -> None:
     # PATCH: Miman Reveal
     # ==================================================================
     if do_mimans:
-        actual = bytes(data[MIMAN_POS_CHECK_OFFSET : MIMAN_POS_CHECK_OFFSET + 16])
-        if actual != MIMAN_POS_CHECK_ORIG:
+        miman_offset = signatures.resolve(
+            data, MIMAN_POS_CHECK_OFFSET, MIMAN_POS_CHECK_ORIG
+        )
+        if miman_offset is None:
             print(
                 f"\n  WARNING: Miman AOB mismatch at "
                 f"0x{MIMAN_POS_CHECK_OFFSET:08X} - skipping"
             )
             fail("mimans")
         else:
-            data[MIMAN_POS_CHECK_OFFSET : MIMAN_POS_CHECK_OFFSET + 3] = b"\xb0\x01\xc3"
+            data[miman_offset : miman_offset + 3] = b"\xb0\x01\xc3"
             patch_num += 1
             print(f"\n  [{patch_num}/{total}] Miman Reveal")
-            print(f"    Position check: 0x{MIMAN_POS_CHECK_OFFSET:08X}  -> true")
+            print(f"    Position check: 0x{miman_offset:08X}  -> true")
             ok("mimans")
 
     # ==================================================================
@@ -1310,18 +1312,18 @@ def main() -> None:
     # PATCH: Free Compendium
     # ==================================================================
     if do_compendium:
-        actual = bytes(data[DEVIL_COST_OFFSET : DEVIL_COST_OFFSET + 16])
-        if actual != DEVIL_COST_ORIG:
+        compendium_offset = signatures.resolve(data, DEVIL_COST_OFFSET, DEVIL_COST_ORIG)
+        if compendium_offset is None:
             print(
                 f"\n  WARNING: Compendium AOB mismatch at "
                 f"0x{DEVIL_COST_OFFSET:08X} - skipping"
             )
             fail("compendium")
         else:
-            data[DEVIL_COST_OFFSET : DEVIL_COST_OFFSET + 3] = b"\x33\xc0\xc3"
+            data[compendium_offset : compendium_offset + 3] = b"\x33\xc0\xc3"
             patch_num += 1
             print(f"\n  [{patch_num}/{total}] Free Compendium")
-            print(f"    Cost formula  : 0x{DEVIL_COST_OFFSET:08X}  -> 0")
+            print(f"    Cost formula  : 0x{compendium_offset:08X}  -> 0")
             ok("compendium")
 
     # ==================================================================
