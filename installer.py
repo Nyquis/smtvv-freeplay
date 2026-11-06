@@ -1152,9 +1152,7 @@ def _interactive_flow(game_arg: str | None, console: ui.Console) -> int:
 def _write_log(lines: list[str]) -> Path | None:
     path = Path(tempfile.gettempdir()) / "freeplay-installer.log"
     try:
-        path.write_text(
-            "\n".join(lines) + "\n", encoding="utf-8", errors="replace"
-        )
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8", errors="replace")
     except OSError:
         return None
     return path
@@ -1174,6 +1172,8 @@ def run_interactive(game_arg: str | None, console: ui.Console) -> int:
             path = _write_log(LAST_LOG)
             if path:
                 console.write(f"  Full log: {path}")
+    if console.tty:
+        ui.wait_for_enter(console, "Press Enter to close")
     return code
 
 

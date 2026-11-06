@@ -369,8 +369,21 @@ def test_interactive_wrapper_restores_the_terminal(monkeypatch, tmp_path):
     console.enter_fullscreen = lambda: calls.append("enter")
     console.leave_fullscreen = lambda: calls.append("leave")
     monkeypatch.setattr(entry, "_interactive_flow", lambda *_args: 0)
+    monkeypatch.setattr(entry.ui, "wait_for_enter", lambda *_args: calls.append("wait"))
     assert entry.run_interactive(None, console) == 0
-    assert calls == ["enter", "leave"]
+    assert calls == ["enter", "leave", "wait"]
+
+
+def test_interactive_wrapper_does_not_wait_when_redirected(monkeypatch, tmp_path):
+    console = _console(monkeypatch)
+    console.tty = False
+    console.enter_fullscreen = lambda: None
+    console.leave_fullscreen = lambda: None
+    monkeypatch.setattr(entry, "_interactive_flow", lambda *_args: 0)
+    waited = []
+    monkeypatch.setattr(entry.ui, "wait_for_enter", lambda *_args: waited.append(True))
+    assert entry.run_interactive(None, console) == 0
+    assert waited == []
 
 
 def test_failure_log_is_written(monkeypatch, tmp_path):
@@ -378,6 +391,7 @@ def test_failure_log_is_written(monkeypatch, tmp_path):
     monkeypatch.setattr(entry, "LAST_LOG", ["line one", "line two"])
     monkeypatch.setattr(entry.tempfile, "gettempdir", lambda: str(tmp_path))
     console.write = lambda *_args: None
+    monkeypatch.setattr(entry.ui, "wait_for_enter", lambda *_args: None)
     monkeypatch.setattr(entry, "_interactive_flow", lambda *_args: 1)
     assert entry.run_interactive(None, console) == 1
     log = tmp_path / "freeplay-installer.log"
