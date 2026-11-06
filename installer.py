@@ -201,6 +201,16 @@ class Wizard:
     selection: state.Selection
     baseline: state.Selection
     installed: int
+    preflight: state.PatchRun | None = None
+
+
+def _stage_mark(console: ui.Console, status: str) -> str:
+    return {
+        "done": f"[{console.check()}]",
+        "active": "[>]",
+        "pending": "[ ]",
+        "failed": "[!]",
+    }[status]
 
 
 def _window(cursor: int, count: int, rows: int) -> tuple[int, int]:
@@ -249,7 +259,16 @@ def screen_mods(w: Wizard) -> str:
     w.screen.begin()
     try:
         while True:
-            rows = max(3, w.console.height() - 12)
+            text_width = min(w.console.width(), 100) - 8
+            focused = mods[cursor]
+            description = ui.wrap_text(focused.description, text_width)
+            warning_lines = (
+                ui.wrap_text(focused.warning, text_width) if focused.warning else []
+            )
+            fixed = (
+                8 + len(description) + (1 + len(warning_lines) if warning_lines else 0)
+            )
+            rows = max(3, w.console.height() - fixed)
             start, end = _window(cursor, len(mods), rows)
             body: list[str] = []
             for index in range(start, end):
@@ -259,20 +278,17 @@ def screen_mods(w: Wizard) -> str:
                 warning = "  !" if mod.warning else ""
                 body.append(f" {pointer} [{box}] {mod.label}{warning}")
             body.append("")
-            focused = mods[cursor]
-            text_width = min(w.console.width(), 100) - 8
-            body.extend(
-                "   " + line for line in ui.wrap_text(focused.description, text_width)
-            )
-            if focused.warning:
+            body.extend("   " + line for line in description)
+            if warning_lines:
                 body.append("")
-                for line in ui.wrap_text(focused.warning, text_width):
+                for line in warning_lines:
                     body.append(w.console.yellow(f"   [!] {line}"))
             footer = [
                 w.console.hint(
                     "up/down move   space toggle   a all   n none   enter next   esc quit"
                 )
             ]
+            size = w.console.size()
             _draw(
                 w,
                 "Step 1 of 4: Core Mods",
@@ -280,7 +296,9 @@ def screen_mods(w: Wizard) -> str:
                 footer,
                 right=f"{start + 1}-{end} of {len(mods)}",
             )
-            key = ui.read_key(w.console)
+            key = ui.wait_key_or_resize(w.console, size)
+            if key is None:
+                continue
             if key == "up":
                 cursor = (cursor - 1) % len(mods)
             elif key == "down":
@@ -409,8 +427,11 @@ def screen_gameplay(w: Wizard) -> str:
                     "up/down move   left/right change   enter next   esc back"
                 )
             ]
+            size = w.console.size()
             _draw(w, "Step 2 of 4: Gameplay", body, footer)
-            key = ui.read_key(w.console)
+            key = ui.wait_key_or_resize(w.console, size)
+            if key is None:
+                continue
             if key == "up":
                 focus = (focus - 1) % 3
             elif key == "down":
@@ -486,8 +507,11 @@ def screen_shop(w: Wizard) -> str:
                     "up/down move   left/right change   enter next   esc back"
                 )
             ]
+            size = w.console.size()
             _draw(w, "Step 3 of 4: Shop", body, footer)
-            key = ui.read_key(w.console)
+            key = ui.wait_key_or_resize(w.console, size)
+            if key is None:
+                continue
             if key == "up":
                 focus = (focus - 1) % len(state.SHOP_CATEGORIES)
             elif key == "down":
@@ -538,7 +562,7 @@ def screen_review(w: Wizard) -> str:
     w.screen.begin()
     try:
         while True:
-            rows = max(3, w.console.height() - 11)
+            rows = max(3, w.console.height() - 14)
             body = [
                 f" {w.console.dim('Game:')} {w.game}",
                 f" {w.console.dim('File:')} {state.EXE}",
@@ -578,8 +602,11 @@ def screen_review(w: Wizard) -> str:
             if w.installed:
                 hints += "   r restore original"
             footer = [w.console.hint(hints)]
+            size = w.console.size()
             _draw(w, "Step 4 of 4: Review", body, footer)
-            key = ui.read_key(w.console)
+            key = ui.wait_key_or_resize(w.console, size)
+            if key is None:
+                continue
             if key == "enter" and (not empty or removable):
                 return "apply"
             if key == "r" and w.installed:
@@ -653,6 +680,8 @@ def show_log(w: Wizard, title: str, log: list[str]) -> None:
     w.screen.begin()
     try:
         while True:
+            visible = max(4, w.console.height() - 9)
+            offset = min(offset, max(0, len(log) - visible))
             shown = log[offset : offset + visible] or [w.console.dim("(empty)")]
             end = min(len(log), offset + visible)
             body = [" " + line for line in shown]
@@ -661,8 +690,11 @@ def show_log(w: Wizard, title: str, log: list[str]) -> None:
                     f"up/down scroll   enter close   ({offset + 1}-{end} of {len(log)})"
                 )
             ]
+            size = w.console.size()
             _draw(w, title, body, footer)
-            key = ui.read_key(w.console)
+            key = ui.wait_key_or_resize(w.console, size)
+            if key is None:
+                continue
             if key == "up":
                 offset = max(0, offset - 1)
             elif key == "down":
@@ -680,8 +712,11 @@ def _await_card(
     try:
         while True:
             footer = [w.console.hint("enter close" + ("   d details" if log else ""))]
+            size = w.console.size()
             _draw(w, title, body, footer)
-            key = ui.read_key(w.console)
+            key = ui.wait_key_or_resize(w.console, size)
+            if key is None:
+                continue
             if key == "enter":
                 return
             if key == "d" and log:
@@ -732,11 +767,17 @@ def _run_preflight(w: Wizard, flags: list[str]) -> tuple[bool, state.PatchRun]:
     ok = code == 0 and not run.failed
     w.screen.begin()
     try:
+        _draw_preflight(w, run, tick, True, ok)
+        if ok:
+            return True, run
         while True:
-            _draw_preflight(w, run, tick, True, ok)
-            key = ui.read_key(w.console)
+            size = w.console.size()
+            _draw_preflight(w, run, tick, True, False)
+            key = ui.wait_key_or_resize(w.console, size)
+            if key is None:
+                continue
             if key == "enter":
-                return ok, run
+                return False, run
             if key == "d":
                 w.screen.end()
                 show_log(w, "Preflight log", run.log)
@@ -766,11 +807,18 @@ def _draw_install(
         body.append(f" {console.dim('Working...')}")
     body.append("")
     for label, status in stages:
-        mark = {"done": "[x]", "active": "[>]", "failed": "[!]", "pending": "[ ]"}[
-            status
-        ]
-        line = f" {mark} {label}"
+        line = f" {_stage_mark(console, status)} {label}"
         body.append(console.green(line) if status == "done" else line)
+    if w.preflight and (w.preflight.source_choice or w.preflight.tables_total):
+        bits = []
+        if w.preflight.source_choice:
+            bits.append(w.preflight.source_choice.rstrip(".").removeprefix("Using "))
+        if w.preflight.tables_total:
+            bits.append(f"tables {w.preflight.tables_ok}/{w.preflight.tables_total}")
+        if w.preflight.cave:
+            bits.append("cave " + w.preflight.cave.split()[0])
+        body.append("")
+        body.append(" " + console.dim(" · ".join(bits)))
     if applying and run.current:
         body.append("")
         body.append(f" {console.bold(run.current)}")
@@ -819,7 +867,10 @@ def _done_body(w: Wizard, summary: dict) -> list[str]:
     return body
 
 
-def _run_install(w: Wizard, has_haptics: bool) -> dict:
+def _run_install(
+    w: Wizard, has_haptics: bool, preflight: state.PatchRun | None = None
+) -> dict:
+    w.preflight = preflight
     bindir = platform.bin_dir(w.game)
     original_existed = (bindir / f"{state.EXE}.original").is_file()
     run = state.PatchRun()
@@ -853,7 +904,8 @@ def _run_install(w: Wizard, has_haptics: bool) -> dict:
             stages[1] = ("Applying patches", "failed")
             _draw_install(w, stages, run, tick, "Patcher failed", False)
             w.screen.end()
-            _await_card(w, "Installation failed", _failure_body(w, run), run.log)
+            card_log = (preflight.log if preflight else []) + run.log
+            _await_card(w, "Installation failed", _failure_body(w, run), card_log)
             return {"ok": False}
         stages[1] = ("Applying patches", "done")
 
@@ -898,7 +950,8 @@ def _run_install(w: Wizard, has_haptics: bool) -> dict:
         "backup": "existing" if original_existed else "created",
         "haptics": haptics,
     }
-    _await_card(w, "Done", _done_body(w, summary), run.log)
+    card_log = (preflight.log if preflight else []) + run.log
+    _await_card(w, "Done", _done_body(w, summary), card_log)
     return summary
 
 
@@ -918,8 +971,11 @@ def status_screen(w: Wizard) -> str:
                 pointer = w.console.marker() if index == cursor else " "
                 body.append(f" {pointer} {label}")
             footer = [w.console.hint("up/down move   enter select   esc quit")]
+            size = w.console.size()
             _draw(w, "Freeplay setup", body, footer)
-            key = ui.read_key(w.console)
+            key = ui.wait_key_or_resize(w.console, size)
+            if key is None:
+                continue
             if key == "up":
                 cursor = (cursor - 1) % len(labels)
             elif key == "down":
@@ -957,8 +1013,11 @@ def confirm_restore(w: Wizard) -> bool:
     w.screen.begin()
     try:
         while True:
+            size = w.console.size()
             _draw(w, "Restore the original game files", body, footer)
-            key = ui.read_key(w.console)
+            key = ui.wait_key_or_resize(w.console, size)
+            if key is None:
+                continue
             if key == "enter":
                 return True
             if key in ("esc", "q"):
@@ -1077,10 +1136,10 @@ def run_interactive(game_arg: str | None, console: ui.Console) -> int:
         ui.wait_for_enter(console)
         return 0
 
-    ok, _run = _run_preflight(w, w.selection.flags())
+    ok, preflight_run = _run_preflight(w, w.selection.flags())
     if not ok:
         return 1
-    summary = _run_install(w, features.get("haptics") == "1")
+    summary = _run_install(w, features.get("haptics") == "1", preflight_run)
     return 0 if summary.get("ok") else 1
 
 

@@ -68,6 +68,9 @@ class Console:
     def height(self) -> int:
         return max(16, shutil.get_terminal_size((80, 24)).lines)
 
+    def size(self) -> tuple[int, int]:
+        return self.width(), self.height()
+
     def style(self, text: str, *codes: str) -> str:
         if not self.color or not codes:
             return text
@@ -256,12 +259,19 @@ def decode_key(data: bytes) -> str:
     return data.decode("utf-8", "ignore").lower()
 
 
-def read_key(console: Console) -> str:
+def read_key(console: Console, timeout: float | None = None) -> str | None:
     if not console.tty:
         return "enter"
     if os.name == "nt":
         import msvcrt
+        import time
 
+        if timeout is not None:
+            deadline = time.monotonic() + timeout
+            while not msvcrt.kbhit():
+                if time.monotonic() >= deadline:
+                    return None
+                time.sleep(0.03)
         char = msvcrt.getwch()
         if char in ("\x00", "\xe0"):
             code = msvcrt.getwch()
@@ -277,6 +287,8 @@ def read_key(console: Console) -> str:
     old = termios.tcgetattr(descriptor)
     try:
         tty.setcbreak(descriptor)
+        if timeout is not None and not select.select([descriptor], [], [], timeout)[0]:
+            return None
         data = os.read(descriptor, 1)
         if data == b"\x1b":
             while len(data) < 3 and select.select([descriptor], [], [], 0.02)[0]:
@@ -284,6 +296,18 @@ def read_key(console: Console) -> str:
         return decode_key(data)
     finally:
         termios.tcsetattr(descriptor, termios.TCSADRAIN, old)
+
+
+def wait_key_or_resize(
+    console: Console, size: tuple[int, int], timeout: float = 0.25
+) -> str | None:
+    """Return the next key, or None when the terminal was resized."""
+    while True:
+        key = read_key(console, timeout)
+        if key is not None:
+            return key
+        if console.size() != size:
+            return None
 
 
 def plain_toggle(console: Console, mods, selected: dict[str, bool]) -> None:

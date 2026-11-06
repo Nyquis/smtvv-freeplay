@@ -34,6 +34,21 @@ def test_fit_keeps_short_lines_untouched():
     assert ui._fit("hello", 20) == "hello"
 
 
+def test_wait_key_or_resize_returns_the_key(monkeypatch):
+    console = _plain_console()
+    console.size = lambda: (80, 24)
+    monkeypatch.setattr(ui, "read_key", lambda _c, timeout=None: "enter")
+    assert ui.wait_key_or_resize(console, (80, 24)) == "enter"
+
+
+def test_wait_key_or_resize_detects_a_resize(monkeypatch):
+    console = _plain_console()
+    sizes = iter([(80, 24), (100, 30)])
+    console.size = lambda: next(sizes)
+    monkeypatch.setattr(ui, "read_key", lambda _c, timeout=None: None)
+    assert ui.wait_key_or_resize(console, (80, 24)) is None
+
+
 def test_fit_ignores_colour_codes_when_measuring():
     line = "\x1b[36mhello\x1b[0m"
     assert ui._fit(line, 5) == line

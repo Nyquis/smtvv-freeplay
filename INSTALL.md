@@ -31,8 +31,9 @@ again.
    (install/change/remove against the current install). Enter continues, Esc
    goes back; nothing is written before the review.
    After the review, a preflight check runs with a progress bar and a summary;
-   Enter applies the patches and tracks each install stage. Press `d` on the
-   check or Done cards to read the full patcher log.
+   when it passes, installation starts automatically and each stage is tracked.
+   Press `d` on the Done card (or a failure) to read the full patcher log; the
+   interface also follows the terminal size if you resize the window.
    Run `install.bat` again later to add or remove mods; installed mods are
    pre-selected and the first screen offers to restore the original files.
 5. If it can't find the game automatically, paste your SMT5V folder path when

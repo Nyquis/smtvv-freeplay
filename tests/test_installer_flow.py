@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import queue
 import sys
 
 import installer as entry
@@ -12,7 +13,7 @@ import installer_ui as ui
 
 def _keys(monkeypatch, *keys):
     scripted = iter(keys)
-    monkeypatch.setattr(ui, "read_key", lambda _console: next(scripted))
+    monkeypatch.setattr(ui, "read_key", lambda _console, *_args: next(scripted))
 
 
 def _fake_game(tmp_path):
@@ -225,3 +226,138 @@ def test_router_passes_the_selected_flags(monkeypatch, tmp_path):
     assert "--no-heal" not in captured["flags"]
     assert "--magatsuhi-chain" in captured["flags"]
     assert "--no-refill" in captured["flags"]
+
+
+def _last_frame(text):
+    marker = " SMT5V: Vengeance - Freeplay Mod Installer"
+    blocks = text.split(marker)
+    block = marker + blocks[-1] if len(blocks) > 1 else text
+    return [line for line in block.splitlines() if line.strip()]
+
+
+class _FakeProcess:
+    def __init__(self, code):
+        self.code = code
+
+    def wait(self, timeout=None):
+        return self.code
+
+
+class _FakeStream:
+    def __init__(self, lines, code=0):
+        self.queue = queue.Queue()
+        for line in lines:
+            self.queue.put(line)
+        self.queue.put(None)
+        self.process = _FakeProcess(code)
+
+
+def test_preflight_advances_without_waiting_for_a_key(monkeypatch, tmp_path):
+    wizard = _wizard(monkeypatch, tmp_path)
+    lines = [
+        "  Patches selected: Heal",
+        "  [1/1] Leyline Auto-Heal",
+        "  Check complete - nothing was written.",
+    ]
+    monkeypatch.setattr(
+        entry.platform, "start_patcher", lambda *_args, **_kwargs: _FakeStream(lines)
+    )
+
+    def refuse(*_args, **_kwargs):
+        raise AssertionError("the preflight should not wait for a key")
+
+    monkeypatch.setattr(entry.ui, "read_key", refuse)
+    ok, run = entry._run_preflight(wizard, ["--no-heal"])
+    assert ok is True
+    assert run.done == 1
+
+
+def test_preflight_waits_for_a_key_when_it_fails(monkeypatch, tmp_path):
+    wizard = _wizard(monkeypatch, tmp_path)
+    lines = ["  Patches selected: Heal", "  Check summary: failed: heal"]
+    monkeypatch.setattr(
+        entry.platform,
+        "start_patcher",
+        lambda *_args, **_kwargs: _FakeStream(lines, code=1),
+    )
+    _keys(monkeypatch, "enter")
+    ok, run = entry._run_preflight(wizard, ["--no-heal"])
+    assert ok is False
+    assert run.failed is True
+
+
+def test_screens_fit_an_80x24_terminal(monkeypatch, tmp_path):
+    root = _fake_game(tmp_path)
+    everything = state.Selection(
+        mods={mod.key: True for mod in state.PATCH_MODS},
+        magatsuhi="battle",
+        item_hacks="stockpile",
+        autosave=3,
+        shop={category: "free" for category in state.SHOP_CATEGORIES},
+    )
+    cases = (
+        (entry.screen_mods, ["down"] * 6 + ["esc"], state.Selection()),
+        (entry.screen_gameplay, ["esc"], state.Selection()),
+        (entry.screen_shop, ["esc"], state.Selection()),
+        (entry.screen_review, ["esc"], everything),
+    )
+    for screen, keys, selection in cases:
+        console = _console(monkeypatch)
+        console.width = lambda: 80
+        console.height = lambda: 24
+        out = sys.stdout
+        wizard = entry.Wizard(
+            console=console,
+            screen=ui.Screen(console),
+            game=root,
+            version="test",
+            selection=selection,
+            baseline=state.Selection(),
+            installed=0,
+        )
+        _keys(monkeypatch, *keys)
+        screen(wizard)
+        lines = _last_frame(out.getvalue())
+        assert len(lines) <= 24, (screen.__name__, len(lines))
+
+
+def test_stage_mark_uses_a_check_for_done(monkeypatch, tmp_path):
+    wizard = _wizard(monkeypatch, tmp_path)
+    assert entry._stage_mark(wizard.console, "done") == "[+]"
+    assert entry._stage_mark(wizard.console, "active") == "[>]"
+    assert entry._stage_mark(wizard.console, "pending") == "[ ]"
+    wizard.console.unicode = True
+    assert entry._stage_mark(wizard.console, "done") == "[✓]"
+
+
+def test_install_frame_fits_80x24(monkeypatch, tmp_path):
+    console = _console(monkeypatch)
+    console.width = lambda: 80
+    console.height = lambda: 24
+    wizard = entry.Wizard(
+        console=console,
+        screen=ui.Screen(console),
+        game=_fake_game(tmp_path),
+        version="test",
+        selection=state.Selection(),
+        baseline=state.Selection(),
+        installed=0,
+    )
+    wizard.preflight = state.PatchRun(
+        source_choice="Using original backup.",
+        tables_total=4,
+        tables_ok=4,
+        cave="0x00522031 len=1487",
+    )
+    stages = [
+        ("Preflight verified", "done"),
+        ("Applying patches", "done"),
+        ("Installing executable", "done"),
+        ("Write feature record", "done"),
+        ("Finishing touches", "done"),
+    ]
+    entry._draw_install(
+        wizard, stages, state.PatchRun(total=15, done=15), 3, "Done.", False
+    )
+    lines = _last_frame(sys.stdout.getvalue())
+    assert len(lines) <= 24

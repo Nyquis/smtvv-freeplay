@@ -2,7 +2,7 @@
 
 Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
 
-**Current version: 5.15.0**
+**Current version: 5.16.0**
 
 ## Features
 
@@ -115,9 +115,11 @@ See **[INSTALL.md](INSTALL.md)** for the full step-by-step. Quick version below.
    first point at which anything is written.
 
    After the review, a preflight check runs with a progress bar and a summary
-   (source, cave, data tables and selected patches). Press Enter to install;
-   the install screen tracks each stage and ends with a Done card. Press `d`
-   on the check or Done cards to read the full patcher log.
+   (source, cave, data tables and selected patches). When it passes, the
+   installer continues automatically; failures wait so you can read them. The
+   install screen tracks each stage and ends with a Done card. Press `d` on the
+   Done card (or a failure) to read the full patcher log. The interface follows
+   the window if you resize it.
 
    Run `install.bat` again later to add or remove mods: installed mods are
    pre-selected, and the first screen offers to uninstall everything.
