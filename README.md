@@ -2,6 +2,16 @@
 
 Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
 
+> **Fork notice**
+>
+> This is a personal fork of
+> [countlessbats/smtvv-freeplay](https://github.com/countlessbats/smtvv-freeplay),
+> maintained by [Nyquis](https://github.com/Nyquis). It is provided on a
+> **best-effort basis**: updates happen when time allows, features are not
+> guaranteed to work with every game update, and there is no support
+> commitment. Back up your saves and use it at your own risk. This project is
+> not affiliated with ATLUS or SEGA.
+
 **Current version: 5.16.2**
 
 ## Features

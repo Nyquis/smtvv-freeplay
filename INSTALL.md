@@ -1,5 +1,8 @@
 # SMTVV Freeplay — Installation
 
+> Personal fork of countlessbats/smtvv-freeplay, maintained on a best-effort
+> basis. No feature is guaranteed; see the fork notice in README.md.
+
 A quality-of-life patch bundle for *Shin Megami Tensei V: Vengeance*: Reusable
 Essences, Leyline Auto-Heal, Miman Reveal, Leyline Founts, NG+ Miracles From
 Start, Free Compendium, Item Hacks (Battle Refill or Stockpile), Superjump, Shop
