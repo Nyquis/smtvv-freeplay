@@ -417,6 +417,14 @@ def relocate(data: bytes | bytearray) -> list[str]:
         "heal",
         notes,
     )
+    _relocate_va(
+        data,
+        patcher,
+        "PARTY_ALL_CURE_VA",
+        patcher.PARTY_ALL_CURE_ORIG,
+        "heal.party_all_cure",
+        notes,
+    )
     _relocate_off(
         data,
         patcher,

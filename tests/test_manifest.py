@@ -27,6 +27,7 @@ def synthetic_layout(monkeypatch):
             (
                 "TRAMP_OFFSET",
                 "RYUKETSU_TRAMP_OFFSET",
+                "PARTY_ALL_CURE_VA",
                 "MIRACLE_ADDED_TRAMP",
                 "MIRACLE_STATE_TRAMP",
                 "MIRACLE_666_NOP_ADDR",
@@ -186,6 +187,17 @@ def test_relocate_rewrites_sites_and_aliases(synthetic_layout):
     dispatch = int.from_bytes(newborn.RENEWAL_JMP_ORIG[1:5], "little", signed=True)
     assert newborn.RENEWAL_IMPL == 0x400 + 5 + dispatch
     assert not any("essences" in note for note in notes)
+
+
+def test_relocate_rewrites_party_all_cure(synthetic_layout):
+    import patch_smtvv_freeplay as patcher
+
+    data = bytearray(0x1000)
+    data[0x500 : 0x500 + len(patcher.PARTY_ALL_CURE_ORIG)] = patcher.PARTY_ALL_CURE_ORIG
+    notes = patch_manifest.relocate(data)
+
+    assert patcher.PARTY_ALL_CURE_VA == 0x500
+    assert not any("party_all_cure" in note for note in notes)
 
 
 def test_relocate_reports_an_ambiguous_site(synthetic_layout):

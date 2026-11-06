@@ -104,7 +104,7 @@ from patch_manifest import LEGACY_MAP_PAK, MIRACLE_PAK
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.22.0"
+MOD_VERSION = "5.22.1"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -146,6 +146,11 @@ RYUKETSU_TRAMP_ORIG = bytes([0xE9, 0x8B, 0xD5, 0x65, 0x0A])
 # Self-contained: fetches NkmDataManager singleton internally,
 # so it can be called with any register state.
 PARTY_ALL_CURE_VA = 0x140AB94B0
+# 29-byte prologue; unique. It stops before the relative call displacement,
+# so it stays valid if the function called from the prologue moves.
+PARTY_ALL_CURE_ORIG = bytes.fromhex(
+    "48895c240848896c241048897424185741544155415641574883ec40e8"
+)
 
 # CheckMimanPositionFlag C++ implementation  (is a miman shown on the map?)
 # Signature: bool CheckMimanPositionFlag(int index).  The map asks this when
@@ -183,6 +188,34 @@ DEVIL_COST_ORIG = bytes.fromhex("4c8bdc49894b0841574881ecc0000000")
 
 def file_to_va(foff: int) -> int:
     return gameplay_patches.va(foff)
+
+
+def _heal_code(party_cure_va: int, orig_tgt: int, dest_va: int) -> bytes:
+    """Call PartyAllCure, then tail-jump to the original fount function.
+
+    Seven pushes keep RSP 16-byte aligned before the call, so no sub/add rsp
+    pair is needed. The callee-saved registers are restored first.
+    """
+    code = bytearray()
+    code += b"\x51"  # push rcx
+    code += b"\x52"  # push rdx
+    code += b"\x41\x50"  # push r8
+    code += b"\x41\x51"  # push r9
+    code += b"\x57"  # push rdi
+    code += b"\x56"  # push rsi
+    code += b"\x53"  # push rbx
+    code += b"\xe8"  # call PartyAllCure
+    code += struct.pack("<i", party_cure_va - (dest_va + len(code) + 4))
+    code += b"\x5b"  # pop rbx
+    code += b"\x5e"  # pop rsi
+    code += b"\x5f"  # pop rdi
+    code += b"\x41\x59"  # pop r9
+    code += b"\x41\x58"  # pop r8
+    code += b"\x5a"  # pop rdx
+    code += b"\x59"  # pop rcx
+    code += b"\xe9"  # jmp original
+    code += struct.pack("<i", orig_tgt - (dest_va + len(code) + 4))
+    return bytes(code)
 
 
 IMAGE_SCN_MEM_EXECUTE = 0x20000000
@@ -1120,7 +1153,7 @@ def main() -> None:
     if do_heal:
         ry_actual = bytes(data[RYUKETSU_TRAMP_OFFSET : RYUKETSU_TRAMP_OFFSET + 5])
         if ry_actual != RYUKETSU_TRAMP_ORIG:
-            print("\n  WARNING: Leyline AOB mismatch — skipping heal patch")
+            print("\n  WARNING: Leyline AOB mismatch - skipping heal patch")
             fail("heal")
         else:
             ry_disp = struct.unpack_from("<i", data, RYUKETSU_TRAMP_OFFSET + 1)[0]
@@ -1129,29 +1162,15 @@ def main() -> None:
 
             h_off = next_cave_off
             h_va = file_to_va(h_off)
-
-            hsc = bytearray()
-            hsc += b"\x51"  # push rcx
-            hsc += b"\x52"  # push rdx
-            hsc += b"\x41\x50"  # push r8
-            hsc += b"\x41\x51"  # push r9
-            hsc += b"\x53"  # push rbx
-            hsc += b"\x48\x83\xec\x20"  # sub rsp, 20h
-            hsc += b"\xe8"  # call PartyAllCure
-            cf = h_va + len(hsc) + 4
-            hsc += struct.pack("<i", PARTY_ALL_CURE_VA - cf)
-            hsc += b"\x48\x83\xc4\x20"  # add rsp, 20h
-            hsc += b"\x5b"  # pop rbx
-            hsc += b"\x41\x59"  # pop r9
-            hsc += b"\x41\x58"  # pop r8
-            hsc += b"\x5a"  # pop rdx
-            hsc += b"\x59"  # pop rcx
-            hsc += b"\xe9"  # jmp original
-            hsc += struct.pack("<i", ry_orig_tgt - (h_va + len(hsc) + 4))
-
-            for i in range(len(hsc)):
-                assert data[h_off + i] == 0xCC
-            data[h_off : h_off + len(hsc)] = hsc
+            hsc = _heal_code(PARTY_ALL_CURE_VA, ry_orig_tgt, h_va)
+            next_cave_off = gameplay_patches._place(
+                data,
+                h_off,
+                cave_off + cave_len,
+                hsc,
+                base_va=h_va,
+                check_refs=True,
+            )
             struct.pack_into(
                 "<i", data, RYUKETSU_TRAMP_OFFSET + 1, h_va - (ry_tramp_va + 5)
             )
@@ -1160,7 +1179,6 @@ def main() -> None:
             print(f"\n  [{patch_num}/{total}] Leyline Auto-Heal")
             print(f"    Code cave     : 0x{h_off:08X}  ({len(hsc)} bytes)")
             print(f"    Trampoline    : 0x{RYUKETSU_TRAMP_OFFSET:08X}  -> cave")
-            next_cave_off = h_off + ((len(hsc) + 15) & ~15)
             ok("heal")
 
     # ==================================================================
