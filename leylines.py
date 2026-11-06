@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nyquis
+# SPDX-License-Identifier: Apache-2.0
+
 """
 Leyline fount icons on the main map.
 

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nyquis
+# SPDX-License-Identifier: Apache-2.0
+
 """
 Build the release zip for end users.
 
@@ -47,8 +50,10 @@ INCLUDE_FILES = (
     "README.md",
     "INSTALL.md",
     "LICENSE",
+    "NOTICE",
+    "LICENSING.md",
 )
-INCLUDE_DIRS = ("python", "repak", "haptics")
+INCLUDE_DIRS = ("LICENSES", "python", "repak", "haptics")
 EXECUTABLES = {"install.sh", "uninstall.sh", "repak/linux64/repak"}
 FIXED_TIME = (2020, 1, 1, 0, 0, 0)
 # Local runtime files that must never ship: the Oodle DLL is downloaded by

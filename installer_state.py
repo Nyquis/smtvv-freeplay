@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nyquis
+# SPDX-License-Identifier: Apache-2.0
+
 """Mod catalogue, install state and patcher flags for the Freeplay installer."""
 
 from __future__ import annotations

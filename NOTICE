@@ -1,0 +1,25 @@
+SMT5V: Vengeance - Freeplay Mod
+Copyright 2026 Nyquis
+
+This product includes software developed by the countlessbats/smtvv-freeplay
+project (https://github.com/countlessbats/smtvv-freeplay), Copyright (c) 2026,
+licensed under the MIT License. The MIT license text is reproduced in
+LICENSES/MIT.txt.
+
+The code and modifications authored by Nyquis are licensed under the
+Apache License, Version 2.0 (see LICENSE). Files that contain upstream-derived
+code remain subject to the MIT terms in LICENSES/MIT.txt; see LICENSING.md for
+the file-level scope.
+
+Bundled third-party components are distributed under their own licenses:
+
+- Python 3.12 runtime: Python Software Foundation License 2.0
+  (python/LICENSE.txt).
+- repak: dual MIT/Apache-2.0 (repak/LICENSE-MIT and repak/LICENSE-APACHE).
+- DualSense Haptics bridge and .NET dependencies: see
+  haptics/DualSenseHaptics/licenses/THIRD-PARTY-NOTICES.md and
+  haptics/DualSenseHaptics/licenses/MinHook.txt.
+
+This project is not affiliated with ATLUS or SEGA. Game assets are never
+included in this repository or its release archives; data paks are generated
+from the user's own game installation.

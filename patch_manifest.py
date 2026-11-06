@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nyquis
+# SPDX-License-Identifier: Apache-2.0
+
 """Central table of patch verification sites and feature data paks.
 
 The patcher uses this after writing the executable: every entry here is

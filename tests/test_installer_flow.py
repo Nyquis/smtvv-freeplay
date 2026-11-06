@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nyquis
+# SPDX-License-Identifier: Apache-2.0
+
 """Drive the wizard screens and the router with scripted keys."""
 
 from __future__ import annotations

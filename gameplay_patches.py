@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Nyquis
+# SPDX-FileCopyrightText: 2026 the countlessbats/smtvv-freeplay authors
+# SPDX-License-Identifier: MIT AND Apache-2.0
+# Modified by Nyquis from the upstream MIT project; see LICENSING.md.
+
 """
 Gameplay patches for the Freeplay patcher: battle consumable refill and
 multi-jump with air control. Each builder writes its code into the shared

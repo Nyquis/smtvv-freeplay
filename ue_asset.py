@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Nyquis
+# SPDX-FileCopyrightText: 2026 the countlessbats/smtvv-freeplay authors
+# SPDX-License-Identifier: MIT AND Apache-2.0
+# Modified by Nyquis from the upstream MIT project; see LICENSING.md.
+
 """
 Minimal editor for cooked UE 4.27 packages (.uasset + .uexp) with tagged
 properties: adds names to the name map, appends DataTable rows and replaces

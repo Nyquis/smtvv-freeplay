@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nyquis
+# SPDX-License-Identifier: Apache-2.0
+
 """Change-scoped tests for package.py."""
 
 from __future__ import annotations
@@ -24,6 +27,15 @@ def test_release_zip_contains_shipping_files_only(tmp_path):
         "SMTVV Freeplay/patch_smtvv_freeplay.py",
         "SMTVV Freeplay/leylines.py",
         "SMTVV Freeplay/reveal.py",
+        "SMTVV Freeplay/README.md",
+        "SMTVV Freeplay/LICENSE",
+        "SMTVV Freeplay/NOTICE",
+        "SMTVV Freeplay/LICENSING.md",
+        "SMTVV Freeplay/LICENSES/MIT.txt",
+        "SMTVV Freeplay/python/LICENSE.txt",
+        "SMTVV Freeplay/repak/LICENSE-MIT",
+        "SMTVV Freeplay/repak/LICENSE-APACHE",
+        "SMTVV Freeplay/haptics/DualSenseHaptics/licenses/THIRD-PARTY-NOTICES.md",
         "SMTVV Freeplay/python/python.exe",
         "SMTVV Freeplay/repak/win64/repak.exe",
         "SMTVV Freeplay/haptics/DualSenseHaptics/SMTVHaptics.exe",

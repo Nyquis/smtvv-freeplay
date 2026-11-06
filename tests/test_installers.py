@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nyquis
+# SPDX-License-Identifier: Apache-2.0
+
 """Guard the thin launchers and the installer's flag contract."""
 
 from __future__ import annotations

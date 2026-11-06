@@ -140,6 +140,10 @@ Before every commit:
   so they stay consistent with the installers.
 - Bundled binaries (`python/`, `repak/`, `DualSenseHaptics`) are committed.
   Do not rebuild or replace them without asking.
+- Keep `LICENSE`, `NOTICE`, `LICENSING.md` and `LICENSES/MIT.txt` in sync.
+  Nyquis-authored code is Apache-2.0; upstream-derived files stay MIT and must
+  keep the upstream notice. `tests/test_license.py` enforces the file-level
+  declarations and the release archive contents.
 - Line endings are enforced by `.gitattributes` (`*.sh` → LF, `*.bat` → CRLF).
   Do not change it or renormalise existing files.
 - Keep the version string in `README.md` in sync with any release change.

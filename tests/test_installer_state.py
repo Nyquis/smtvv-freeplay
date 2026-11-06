@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nyquis
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for the installer's catalogue, state parsing and flags."""
 
 from __future__ import annotations

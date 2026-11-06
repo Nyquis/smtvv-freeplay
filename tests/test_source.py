@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nyquis
+# SPDX-License-Identifier: Apache-2.0
+
 """Change-scoped tests for the executable source/backup guard."""
 
 from __future__ import annotations

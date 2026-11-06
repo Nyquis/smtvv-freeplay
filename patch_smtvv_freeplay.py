@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Nyquis
+# SPDX-FileCopyrightText: 2026 the countlessbats/smtvv-freeplay authors
+# SPDX-License-Identifier: MIT AND Apache-2.0
+# Modified by Nyquis from the upstream MIT project; see LICENSING.md.
+
 """
 SMT5V: Vengeance - Freeplay Patcher
 ===================================
@@ -99,7 +104,7 @@ from patch_manifest import LEGACY_MAP_PAK, MIRACLE_PAK
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.21.0"
+MOD_VERSION = "5.22.0"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"

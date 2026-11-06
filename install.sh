@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Nyquis
+# SPDX-FileCopyrightText: 2026 the countlessbats/smtvv-freeplay authors
+# SPDX-License-Identifier: MIT AND Apache-2.0
+# Modified by Nyquis from the upstream MIT project; see LICENSING.md.
+
 # Thin launcher: the installer itself is installer.py (standard library only).
 set -euo pipefail
 

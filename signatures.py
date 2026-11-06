@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nyquis
+# SPDX-License-Identifier: Apache-2.0
+
 """Signature helpers for auditing patch sites and future relocation.
 
 Each site is identified by a short window of its own bytes. If a game update

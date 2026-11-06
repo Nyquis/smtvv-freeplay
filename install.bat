@@ -1,4 +1,8 @@
 @echo off
+REM SPDX-FileCopyrightText: 2026 Nyquis
+REM SPDX-FileCopyrightText: 2026 the countlessbats/smtvv-freeplay authors
+REM SPDX-License-Identifier: MIT AND Apache-2.0
+REM Modified by Nyquis from the upstream MIT project; see LICENSING.md.
 setlocal
 chcp 65001 >nul
 

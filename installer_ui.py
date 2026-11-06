@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nyquis
+# SPDX-License-Identifier: Apache-2.0
+
 """Small stdlib terminal UI for the Freeplay installer."""
 
 from __future__ import annotations

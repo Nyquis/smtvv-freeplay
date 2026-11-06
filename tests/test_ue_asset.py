@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nyquis
+# SPDX-License-Identifier: Apache-2.0
+
 """Change-scoped tests for ue_asset's tagged-property round trip.
 
 The fixture is a hand-built package object: the parser's header handling is

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nyquis
+# SPDX-License-Identifier: Apache-2.0
+
 """Change-scoped tests for the leyline fog-bypass patch."""
 
 from __future__ import annotations

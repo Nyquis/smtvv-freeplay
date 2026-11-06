@@ -12,7 +12,7 @@ Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
 > commitment. Back up your saves and use it at your own risk. This project is
 > not affiliated with ATLUS or SEGA.
 
-**Current version: 5.21.0**
+**Current version: 5.22.0**
 
 ## Features
 
@@ -425,8 +425,14 @@ stays the one end users run.
 
 ## License
 
-This project is licensed under the **MIT License** — see [LICENSE](LICENSE).
-You are free to use, modify, and redistribute it.
+Nyquis-authored code and modifications are licensed under the **Apache License
+2.0** - see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+This project is a fork of the MIT-licensed
+[countlessbats/smtvv-freeplay](https://github.com/countlessbats/smtvv-freeplay).
+Upstream-derived files remain subject to the MIT License, reproduced verbatim
+in [LICENSES/MIT.txt](LICENSES/MIT.txt). See [LICENSING.md](LICENSING.md) for
+the file-level scope and the release-license history.
 
 The bundled portable Python runtime in `python/` is distributed under the Python
 Software Foundation License (see `python/LICENSE.txt`). The bundled `repak`

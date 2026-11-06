@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Nyquis
+# SPDX-FileCopyrightText: 2026 the countlessbats/smtvv-freeplay authors
+# SPDX-License-Identifier: MIT AND Apache-2.0
+# Modified by Nyquis from the upstream MIT project; see LICENSING.md.
+
 """
 Newborn Clears Compendium: starting a New Game+ with the Newborn method also
 empties the Demon Compendium.

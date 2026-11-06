@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nyquis
+# SPDX-License-Identifier: Apache-2.0
+
 """Host operations for the Freeplay installer: discovery, files and processes."""
 
 from __future__ import annotations

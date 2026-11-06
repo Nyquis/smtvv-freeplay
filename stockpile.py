@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Nyquis
+# SPDX-FileCopyrightText: 2026 the countlessbats/smtvv-freeplay authors
+# SPDX-License-Identifier: MIT AND Apache-2.0
+# Modified by Nyquis from the upstream MIT project; see LICENSING.md.
+
 """
 Stockpile: battle items can be stockpiled up to 99 outside battle, while
 each battle still allows only the game's normal carry limit of each item

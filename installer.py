@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nyquis
+# SPDX-License-Identifier: Apache-2.0
+
 """SMT5V: Vengeance - Freeplay Mod Installer.
 
 The batch and shell launchers only pick a Python interpreter and hand over

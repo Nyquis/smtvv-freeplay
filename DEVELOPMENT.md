@@ -117,6 +117,7 @@ matches your install. Run it first after a game update.
 - `pixi run package` builds `dist/smtvv-freeplay-<version>.zip` from an explicit
   allowlist (`package.py`). Commit nothing in `dist/` — it is ignored.
 - Keep `python/`, `repak/` and `DualSenseHaptics` in the zip.
+- Ship `LICENSE`, `NOTICE`, `LICENSING.md` and `LICENSES/` in every archive.
 - Do not ship `.pixi/`, tests, CI files or development docs.
 - Do not make `install.bat` / `install.sh` depend on pixi: end users do not
   have it.

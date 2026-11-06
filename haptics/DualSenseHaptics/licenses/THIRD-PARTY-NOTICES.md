@@ -16,8 +16,10 @@ following third-party libraries. They are redistributed unmodified.
 
 The MinHook license text is in `MinHook.txt`.
 
-`SMTVHaptics.exe` and `DualSenseHapticsBridgeHost.exe` are part of this
-project and use the repository's MIT license (see the root `LICENSE`).
+`SMTVHaptics.exe` and `DualSenseHapticsBridgeHost.exe` are part of the
+upstream `countlessbats/smtvv-freeplay` project and are distributed under the
+MIT License (see `LICENSES/MIT.txt`). Modifications by Nyquis, if any, are
+additionally available under the Apache License 2.0; see `LICENSING.md`.
 
 ## MIT License
 

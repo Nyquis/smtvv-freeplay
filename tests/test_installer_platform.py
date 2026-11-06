@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nyquis
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for installer_platform's pure discovery helpers."""
 
 from __future__ import annotations
