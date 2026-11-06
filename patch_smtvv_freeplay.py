@@ -99,7 +99,7 @@ from patch_manifest import LEGACY_MAP_PAK, MIRACLE_PAK
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.17.1"
+MOD_VERSION = "5.17.2"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -729,11 +729,14 @@ def _verify_patched(
         for offset, length, original in entries:
             if patched[offset : offset + length] == original:
                 failures.append(f"{feature}: site 0x{offset:08X} was not changed")
+    repak = find_repak()
     for feature, pak in patch_manifest.FEATURE_PAKS:
         if results.get(feature):
             pak_path = os.path.join(game_dir, PAKS_SUBPATH, pak)
             if not os.path.isfile(pak_path):
                 failures.append(f"{feature}: missing data pak {pak}")
+            elif repak is not None:
+                failures.extend(patch_manifest.validate_pak(repak, pak_path, feature))
     return failures
 
 

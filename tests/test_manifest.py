@@ -31,3 +31,47 @@ def test_static_sites_relocate_simple_features():
     sites = patch_manifest.static_sites(data)
     assert sites["mimans"][0][0] == 0x800
     assert sites["compendium"][0][0] == 0x900
+
+
+def test_validate_pak_accepts_the_expected_entry(tmp_path, monkeypatch):
+    import types
+
+    pak = tmp_path / "pakchunk93_FreeplayStockpile_P.pak"
+    pak.write_bytes(b"x")
+    calls = []
+
+    def fake_run(command, **_kwargs):
+        calls.append(command)
+        return types.SimpleNamespace(returncode=0, stdout="WB_CampItemList.uasset")
+
+    monkeypatch.setattr(patch_manifest.subprocess, "run", fake_run)
+    assert patch_manifest.validate_pak("repak", str(pak), "stockpile") == []
+    assert calls[0][:2] == ["repak", "list"]
+
+
+def test_validate_pak_reports_a_missing_entry(tmp_path, monkeypatch):
+    import types
+
+    pak = tmp_path / "pak.pak"
+    pak.write_bytes(b"x")
+    monkeypatch.setattr(
+        patch_manifest.subprocess,
+        "run",
+        lambda *_a, **_k: types.SimpleNamespace(returncode=0, stdout="other"),
+    )
+    failures = patch_manifest.validate_pak("repak", str(pak), "stockpile")
+    assert failures and "lacks" in failures[0]
+
+
+def test_validate_pak_reports_an_unreadable_pak(tmp_path, monkeypatch):
+    import types
+
+    pak = tmp_path / "pak.pak"
+    pak.write_bytes(b"x")
+    monkeypatch.setattr(
+        patch_manifest.subprocess,
+        "run",
+        lambda *_a, **_k: types.SimpleNamespace(returncode=1, stdout=""),
+    )
+    failures = patch_manifest.validate_pak("repak", str(pak), "stockpile")
+    assert failures and "cannot list" in failures[0]

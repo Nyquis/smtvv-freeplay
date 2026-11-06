@@ -7,6 +7,9 @@ installer's catalogue and the feature record.
 
 from __future__ import annotations
 
+import os
+import subprocess
+
 import autosave
 import boot_pak
 import estoma
@@ -33,6 +36,38 @@ FEATURE_PAKS = (
     ("estoma", estoma.ESTOMA_PAK),
     ("reveal", reveal.REVEAL_PAK),
 )
+
+# Substrings that must appear in `repak list` for each generated pak.
+PAK_ENTRIES = {
+    "miracles": ("GodParameterDataTable",),
+    "stockpile": ("WB_CampItemList",),
+    "shop": ("ShopTable",),
+    "intro": ("Logo",),
+    "masakado": ("MM_M063_EM2170",),
+    "newborn": ("InheritMessage",),
+    "estoma": ("BP_EstomaData",),
+    "reveal": ("Minimap",),
+}
+
+
+def validate_pak(repak: str, pak_path: str, feature: str) -> list[str]:
+    """Check that a built pak opens and contains the expected asset."""
+    expected = PAK_ENTRIES.get(feature, ())
+    if not expected:
+        return []
+    name = os.path.basename(pak_path)
+    result = subprocess.run(
+        [repak, "list", pak_path], check=False, capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        return [f"{feature}: repak cannot list {name}"]
+    listing = result.stdout
+    return [
+        f"{feature}: {name} lacks '{entry}'"
+        for entry in expected
+        if entry not in listing
+    ]
+
 
 STATIC_FEATURES = (
     "essences",
