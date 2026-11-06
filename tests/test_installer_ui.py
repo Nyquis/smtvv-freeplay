@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 import installer_ui as ui
 
 
@@ -39,3 +41,20 @@ def test_fit_ignores_colour_codes_when_measuring():
 
 def test_fit_truncates_long_lines():
     assert ui._fit("abcdefghij", 6) == "abc..."
+
+
+def test_windows_terminal_hint_detects_known_terminals(monkeypatch):
+    for name in ("WT_SESSION", "ANSICON", "ConEmuANSI", "TERM_PROGRAM"):
+        monkeypatch.delenv(name, raising=False)
+    assert ui._windows_terminal_hint() is False
+    monkeypatch.setenv("WT_SESSION", "1")
+    assert ui._windows_terminal_hint() is True
+
+
+def test_vt_falls_back_when_ctypes_is_missing(monkeypatch):
+    monkeypatch.setattr(ui.os, "name", "nt")
+    monkeypatch.setitem(sys.modules, "ctypes", None)
+    monkeypatch.setattr(ui, "_windows_terminal_hint", lambda: False)
+    assert ui._enable_windows_vt() is False
+    monkeypatch.setattr(ui, "_windows_terminal_hint", lambda: True)
+    assert ui._enable_windows_vt() is True

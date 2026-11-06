@@ -17,12 +17,27 @@ RED = "\x1b[31m"
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 
 
+def _windows_terminal_hint() -> bool:
+    """Terminals that parse ANSI themselves, without a console-mode flag."""
+    return bool(
+        os.environ.get("WT_SESSION")
+        or os.environ.get("ANSICON")
+        or os.environ.get("ConEmuANSI") == "ON"
+        or os.environ.get("TERM_PROGRAM") in ("vscode", "WezTerm")
+    )
+
+
 def _enable_windows_vt() -> bool:
     if os.name != "nt":
         return True
     try:
         import ctypes
-
+    except ImportError:
+        # The bundled embeddable runtime ships without _ctypes. Windows
+        # Terminal and friends still render ANSI; a classic console falls
+        # back to a clear-and-redraw interface without escape codes.
+        return _windows_terminal_hint()
+    try:
         kernel32 = ctypes.windll.kernel32
         handle = kernel32.GetStdHandle(-11)
         mode = ctypes.c_uint32()
@@ -43,10 +58,9 @@ class Console:
 
     def __init__(self) -> None:
         self.tty = sys.stdin.isatty() and sys.stdout.isatty()
-        self.color = (
-            self.tty and not os.environ.get("NO_COLOR") and _enable_windows_vt()
-        )
-        self.unicode = self.tty and _unicode_ok()
+        self.ansi = self.tty and _enable_windows_vt()
+        self.color = self.ansi and not os.environ.get("NO_COLOR")
+        self.unicode = self.ansi and _unicode_ok()
 
     def width(self) -> int:
         return max(40, min(100, shutil.get_terminal_size((80, 24)).columns))
@@ -88,9 +102,11 @@ class Console:
         sys.stdout.flush()
 
     def clear(self) -> None:
-        if self.tty:
+        if self.ansi:
             sys.stdout.write("\x1b[2J\x1b[H")
             sys.stdout.flush()
+        elif self.tty:
+            os.system("cls" if os.name == "nt" else "clear")
         else:
             self.write()
 
@@ -116,8 +132,8 @@ class Screen:
 
     def begin(self) -> None:
         self.lines = 0
-        self.console.clear()
-        if self.console.tty:
+        if self.console.ansi:
+            self.console.clear()
             sys.stdout.write("\x1b[?25l")
             sys.stdout.flush()
 
@@ -127,6 +143,11 @@ class Screen:
             lines = [*self.chrome, ""] + lines
         lines = [_fit(line, width) for line in lines]
         if not self.console.tty:
+            for line in lines:
+                self.console.write(line)
+            return
+        if not self.console.ansi:
+            self.console.clear()
             for line in lines:
                 self.console.write(line)
             return
@@ -143,7 +164,7 @@ class Screen:
         sys.stdout.flush()
 
     def end(self) -> None:
-        if self.console.tty:
+        if self.console.ansi:
             sys.stdout.write("\x1b[?25h")
             sys.stdout.flush()
         self.lines = 0
