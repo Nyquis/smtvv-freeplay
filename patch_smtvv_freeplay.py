@@ -91,6 +91,7 @@ import patch_manifest
 import quest_pak
 import reveal
 import shop_pak
+import signatures
 import stockpile
 from patch_manifest import LEGACY_MAP_PAK, MIRACLE_PAK
 
@@ -98,7 +99,7 @@ from patch_manifest import LEGACY_MAP_PAK, MIRACLE_PAK
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.16.5"
+MOD_VERSION = "5.16.6"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -1050,6 +1051,15 @@ def main() -> None:
         sys.exit(0)
 
     print(f"\n  Patches selected: {', '.join(enabled)}")
+
+    if check:
+        report = signatures.audit(data, _verification_sites(data))
+        unique, total = signatures.summarise(report)
+        print(f"  Signature audit : {unique}/{total} sites unique")
+        for feature, entries in report.items():
+            bad = [entry for entry in entries if not entry.unique]
+            if bad:
+                print(f"    {feature:<10} {len(bad)} non-unique")
 
     # ==================================================================
     # PATCH: Reusable Essences

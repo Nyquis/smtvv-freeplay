@@ -31,6 +31,7 @@ INCLUDE_FILES = (
     "installer_ui.py",
     "patch_manifest.py",
     "patch_smtvv_freeplay.py",
+    "signatures.py",
     "patch_essences.py",
     "gameplay_patches.py",
     "ue_asset.py",
