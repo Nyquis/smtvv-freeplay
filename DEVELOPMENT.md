@@ -84,6 +84,16 @@ and `pytest.ini` adds the repository root to the import path.
 - Ask before expanding coverage beyond that.
 - Tests must be hermetic: synthetic fixtures only, no game files, no network.
 
+## Feature registry
+
+`patch_manifest.FEATURES` is the single table for each patch feature: its
+installer flag(s), patch entry point, verification sites and data pak.
+`static_sites`, `verification_sites` and `FEATURE_PAKS` are derived from it, so
+a feature is described in one place. `tests/test_installers.py` checks the
+registry against the installer catalogue and flags, while
+`tests/test_install_e2e.py` runs the real patcher on a synthetic PE, activates
+the result through `installer_platform` and checks the feature record.
+
 ## Lint and format
 
 `ruff.toml` sets `target-version = "py312"` and `line-length = 88`. The
