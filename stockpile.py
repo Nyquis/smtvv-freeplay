@@ -300,7 +300,9 @@ def _patch_stockpile(data: bytearray, cave_off: int, cave_end: int,
             a._rel("48 8D 15", limits_va)
             a.raw("0F B6 14 0A 85 D2").je("done")    # movzx edx,[rdx+rcx]; test edx,edx
             a.raw("48 85 DB").je("done")          # no result slot
-            a.raw("88 13")                        # mov [rbx], dl (the low byte of any int width)
+            # The original call already wrote the full result; only its low
+            # byte needs to change to the normal carry limit.
+            a.raw("88 13")                        # mov [rbx], dl
             a.label("done")
             a.raw("48 83 C4 20 5B C3")
             return a

@@ -42,6 +42,8 @@ def synthetic_layout(monkeypatch):
                 "SAVE_SLOT_NATIVE",
                 "FIELD_TICK_SITE",
                 "FIELD_TICK_FN",
+                "GAME_INSTANCE",
+                "CURRENT_LANGUAGE",
             ),
         ),
         (newborn, ("RENEWAL_JMP", "RENEWAL_IMPL", "BOOK_RESET")),
@@ -198,6 +200,22 @@ def test_relocate_rewrites_party_all_cure(synthetic_layout):
 
     assert patcher.PARTY_ALL_CURE_VA == 0x500
     assert not any("party_all_cure" in note for note in notes)
+
+
+def test_relocate_rewrites_autosave_helpers(synthetic_layout):
+    import autosave
+
+    data = bytearray(0x1000)
+    data[0x600 : 0x600 + len(autosave.GAME_INSTANCE_ORIG)] = autosave.GAME_INSTANCE_ORIG
+    data[0x700 : 0x700 + len(autosave.CURRENT_LANGUAGE_ORIG)] = (
+        autosave.CURRENT_LANGUAGE_ORIG
+    )
+    notes = patch_manifest.relocate(data)
+
+    assert autosave.GAME_INSTANCE == 0x600
+    assert autosave.CURRENT_LANGUAGE == 0x700
+    assert not any("autosave.game_instance" in note for note in notes)
+    assert not any("autosave.current_language" in note for note in notes)
 
 
 def test_relocate_reports_an_ambiguous_site(synthetic_layout):

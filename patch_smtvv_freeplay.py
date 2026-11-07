@@ -93,6 +93,7 @@ import gameplay_patches
 import leylines
 import newborn
 import patch_manifest
+import pe_imports
 import quest_pak
 import reveal
 import shop_pak
@@ -104,7 +105,7 @@ from patch_manifest import LEGACY_MAP_PAK, MIRACLE_PAK
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.25.0"
+MOD_VERSION = "5.26.0"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -302,6 +303,13 @@ def _assert_writable(data: bytes | bytearray, va: int, label: str) -> None:
     name, flags = _section_for_va(data, va)
     if not flags & 0x80000000:
         print(f"\n  ERROR: {label} (0x{va:X}) is in non-writable section {name}")
+        sys.exit(1)
+
+
+def _assert_mapped(data: bytes | bytearray, va: int, label: str) -> None:
+    name, _flags = _section_for_va(data, va)
+    if name == "?":
+        print(f"\n  ERROR: {label} (0x{va:X}) is outside every mapped section")
         sys.exit(1)
 
 
@@ -1036,6 +1044,7 @@ def main() -> None:
     with open(source, "rb") as fh:
         data = bytearray(fh.read())
     gameplay_patches.set_image_layout(data)
+    gameplay_patches.set_iat_slots(pe_imports.import_slots(data))
     relocation_notes = patch_manifest.relocate(data)
     if relocation_notes:
         print("  Relocation   : some sites could not be resolved")
@@ -1078,6 +1087,13 @@ def main() -> None:
         _assert_writable(data, addr, label)
         offset = gameplay_patches.off(addr)
         data[offset : offset + size] = b"\0" * size
+    if autosave_slot is not None:
+        for label, addr in (
+            ("SAVE_HEADERS", autosave.SAVE_HEADERS),
+            ("SAVE_HEADER_COUNT", autosave.SAVE_HEADER_COUNT),
+            ("FNAME_BLOCKS", autosave.FNAME_BLOCKS),
+        ):
+            _assert_mapped(data, addr, label)
     next_cave_off = cave_off
     cave_mark = cave_off
     patch_num = 0

@@ -488,6 +488,22 @@ def relocate(data: bytes | bytearray) -> list[str]:
     _relocate_va(
         data,
         autosave,
+        "GAME_INSTANCE",
+        autosave.GAME_INSTANCE_ORIG,
+        "autosave.game_instance",
+        notes,
+    )
+    _relocate_va(
+        data,
+        autosave,
+        "CURRENT_LANGUAGE",
+        autosave.CURRENT_LANGUAGE_ORIG,
+        "autosave.current_language",
+        notes,
+    )
+    _relocate_va(
+        data,
+        autosave,
         "SAVE_SLOT_NATIVE",
         autosave.SAVE_SLOT_ORIG,
         "autosave.save_slot",

@@ -13,6 +13,7 @@ import os
 import struct
 
 import gameplay_patches
+import signatures
 from gameplay_patches import (
     BTL_NEXTSTEP_OFF,
     SETNEXTSTEP_THUNKS,
@@ -59,6 +60,9 @@ SLOT_MIN, SLOT_MAX = 1, 20
 HDR_AUTOSAVE_FLAG = 0x0C
 HDR_LANGUAGE      = 0x75
 CURRENT_LANGUAGE  = 0x140B44420     # returns the current text language in al
+CURRENT_LANGUAGE_ORIG = bytes.fromhex(
+    "48895c2408488974241048897c24184c896424205541564157488bec4883ec40e8"
+)
 SAVE_HEADERS      = 0x1443005B0     # load-menu header entries, 0x70 bytes each
 SAVE_HEADER_COUNT = 0x1443005B8
 HEADER_LANGUAGE   = 0x68
@@ -68,6 +72,7 @@ HEADER_LANGUAGE   = 0x68
 # the game instance (ProjectGameInstance_C.m_MapUICommon).
 HDR_LOCATION      = 0x60
 GAME_INSTANCE     = 0x140B29520     # returns the game instance
+GAME_INSTANCE_ORIG = bytes.fromhex("4883ec284c8b0d3d15a10333c048895c")
 GI_MAP_UI         = 0x1EF0
 MAP_UI_AREA_LABEL = 0x290           # FName {index, number}
 FNAME_BLOCKS      = 0x1443BE310     # FNamePool blocks; entry = block + 2 * offset
@@ -160,6 +165,12 @@ def patch_autosave(data: bytearray, caves: list[list[int]], slot: int,
         return False
     if bytes(data[off(SAVE_BUILD_SITE):off(SAVE_BUILD_SITE) + 5]) != SAVE_BUILD_ORIG:
         return False
+    for addr, original in (
+        (GAME_INSTANCE, GAME_INSTANCE_ORIG),
+        (CURRENT_LANGUAGE, CURRENT_LANGUAGE_ORIG),
+    ):
+        if signatures.resolve(data, off(addr), original) is None:
+            return False
 
     # Battle end: arm the save.
     def step_hook(a, prev, call_prev=True):
@@ -292,6 +303,9 @@ def patch_autosave(data: bytearray, caves: list[list[int]], slot: int,
         a.raw("48 89 D3")                                # mov rbx, rdx (header)
         a.raw("41 B9 01 00 00 00")                       # mov r9d, 1 (player name)
         a.call(SAVE_BUILD_FN)
+        # Clearing the flag matches a menu save; this is deliberate so the
+        # autosave is treated as a normal loadable save, not the game's own
+        # temporary autosave slot.
         a.raw("C7 43 %02X 00 00 00 00" % HDR_AUTOSAVE_FLAG)
         a.call(CURRENT_LANGUAGE)
         a.raw("0F B6 C8")                                # movzx ecx, al

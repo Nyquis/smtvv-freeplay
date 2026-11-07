@@ -486,6 +486,9 @@ TURN_ORIG = bytes.fromhex("f30f59876c010000")
 
 ARC_SITE = 0x140A6C8C6  # rising arc: movss xmm3,[rdi+254h]
 ARC_ORIG = bytes.fromhex("f30f109f54020000")
+# This site is reached by JMP, not CALL. The cave assumes the surrounding
+# function has RSP 0 mod 16 before its 7 pushes + sub rsp,0A8h. That holds on
+# the current build; a future function-layout change needs this rechecked.
 
 # Rising speed is velocityJump + 2*0.5*gravityJump*t (1550 - 4000*t by
 # default). While jump is held the arc time is clamped here, giving a steady
@@ -497,6 +500,33 @@ IAT_GET_WINDOW_THREAD_PID = 0x1549AF878
 IAT_GET_CURRENT_PID = 0x1549AEBD0
 IAT_GET_ASYNC_KEY_STATE = 0x1549AF748
 IAT_XINPUT_GET_STATE = 0x1549AFDF0  # xinput1_3 ordinal 2
+IAT_SLOTS = {
+    "CreateThread": "IAT_CREATE_THREAD",
+    "Sleep": "IAT_SLEEP",
+    "PostMessageW": "IAT_POST_MESSAGE",
+    "GetForegroundWindow": "IAT_GET_FOREGROUND_WINDOW",
+    "GetWindowThreadProcessId": "IAT_GET_WINDOW_THREAD_PID",
+    "GetCurrentProcessId": "IAT_GET_CURRENT_PID",
+    "GetAsyncKeyState": "IAT_GET_ASYNC_KEY_STATE",
+    "XInputGetState": "IAT_XINPUT_GET_STATE",
+}
+
+
+def set_iat_slots(slots: dict[str, int]) -> None:
+    """Point the hook constants at the import table's IAT slots."""
+    module = globals()
+    for name, attribute in IAT_SLOTS.items():
+        module[attribute] = slots.get(name, 0)
+
+
+def iat_missing(*names: str) -> list[str]:
+    missing = []
+    for name in names:
+        attribute = IAT_SLOTS[name]
+        if not globals()[attribute]:
+            missing.append(name)
+    return missing
+
 VK_SPACE = 0x20
 XINPUT_A_OR_B = 0x3000
 
@@ -515,6 +545,14 @@ JUMP_SITES = (
 
 
 def patch_jump(data: bytearray, cave_off: int, cave_end: int) -> int | None:
+    if iat_missing(
+        "GetForegroundWindow",
+        "GetWindowThreadProcessId",
+        "GetCurrentProcessId",
+        "GetAsyncKeyState",
+        "XInputGetState",
+    ):
+        return None
     import signatures
 
     site_va: dict[int, int] = {}
@@ -641,6 +679,15 @@ REFOCUS_GAP_MS = 250
 
 
 def patch_refocus(data: bytearray, caves: list[list[int]]) -> int | None:
+    if iat_missing(
+        "CreateThread",
+        "Sleep",
+        "PostMessageW",
+        "GetForegroundWindow",
+        "GetWindowThreadProcessId",
+        "GetCurrentProcessId",
+    ):
+        return None
     import signatures
 
     site = signatures.resolve(data, off(TITLE_TICK_IMPL), TITLE_TICK_ORIG)
