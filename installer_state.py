@@ -127,6 +127,14 @@ MODS = (
         "--no-newborn",
     ),
     Mod(
+        "refresh",
+        "Party Refresh (experimental)",
+        "Restores the party's HP and MP at every battle step. This makes "
+        "battles effectively survivable and may trivialise the game.",
+        "--refresh",
+        "",
+    ),
+    Mod(
         "haptics",
         "DualSense Haptics",
         "DualSense haptics for battles, skills, field actions and menus.",

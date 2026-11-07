@@ -105,7 +105,7 @@ from patch_manifest import LEGACY_MAP_PAK, MIRACLE_PAK
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.26.0"
+MOD_VERSION = "5.27.0"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -849,6 +849,11 @@ def main() -> None:
         help="Refill Magatsuhi once per chain instead of at every battle",
     )
     parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Experimental: restore party HP/MP every battle step",
+    )
+    parser.add_argument(
         "--no-shop",
         action="store_true",
         help="Leave the shop stock and prices untouched",
@@ -909,6 +914,7 @@ def main() -> None:
     do_refill = not args.no_refill and not do_stockpile
     do_jump = not args.no_jump
     do_magatsuhi = not args.no_magatsuhi
+    do_refresh = args.refresh
     do_intro = not args.no_intro
     do_masakado = not args.no_masakado
     shop_modes = {
@@ -937,6 +943,7 @@ def main() -> None:
         "stockpile": do_stockpile,
         "jump": do_jump,
         "magatsuhi": do_magatsuhi,
+        "refresh": do_refresh,
         "shop": do_shop,
         "intro": do_intro,
         "masakado": do_masakado,
@@ -1111,6 +1118,7 @@ def main() -> None:
             ("Stockpile", do_stockpile),
             ("Jump", do_jump),
             ("Magatsuhi", do_magatsuhi),
+            ("Party Refresh", do_refresh),
             ("Shop", do_shop),
             ("Intro", do_intro),
             ("Masakado", do_masakado),
@@ -1416,7 +1424,7 @@ def main() -> None:
     # ==================================================================
     cave_end = cave_off + cave_len
     slack = None
-    if do_stockpile or do_magatsuhi or autosave_slot is not None:
+    if do_stockpile or do_magatsuhi or do_refresh or autosave_slot is not None:
         trial = bytearray(data)
         slack = gameplay_patches.slack_caves(trial)
         data[:] = trial  # padding refilled with CC only
@@ -1424,6 +1432,26 @@ def main() -> None:
 
     gameplay_patches.DEFER_SETNEXTSTEP = True
     gameplay_patches.DEFERRED_STEPS.clear()
+
+    if do_refresh:
+        cure_va = _heal_cure_target(data)
+        if cure_va is None:
+            print("\n  WARNING: PartyAllCure AOB mismatch - skipping Party Refresh")
+            fail("refresh")
+        else:
+            try:
+                step_va = gameplay_patches.patch_party_refresh(
+                    data, slack, cure_va
+                )
+            except RuntimeError as exc:
+                print(f"\n  WARNING: Party Refresh skipped - {exc}")
+                fail("refresh")
+            else:
+                gameplay_patches.DEFERRED_STEPS["refresh"] = step_va
+                patch_num += 1
+                print(f"\n  [{patch_num}/{total}] Party Refresh")
+                print("    HP/MP         : restored every battle step")
+                ok("refresh")
 
     # ==================================================================
     # PATCH: Stockpile (exe + item list pak; reads the ItemTable carry limits)
@@ -1805,6 +1833,7 @@ def main() -> None:
         "compendium": results.get("compendium", False),
         "jump": results.get("jump", False),
         "magatsuhi": results.get("magatsuhi", False),
+        "refresh": results.get("refresh", False),
         "intro": results.get("intro", False),
         "masakado": results.get("masakado", False),
         "newborn": results.get("newborn", False),

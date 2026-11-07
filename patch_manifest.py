@@ -123,6 +123,10 @@ def _magatsuhi_sites(data) -> list[tuple[int, int]]:
     return _nextstep_sites()
 
 
+def _refresh_sites(data) -> list[tuple[int, int]]:
+    return _nextstep_sites()
+
+
 def _intro_sites(data) -> list[tuple[int, int]]:
     return _resolved_va(data, gp.TITLE_TICK_IMPL, gp.TITLE_TICK_ORIG)
 
@@ -212,6 +216,13 @@ FEATURES = (
         ("--no-magatsuhi", "--magatsuhi-chain"),
         "gameplay_patches.patch_magatsuhi",
         _magatsuhi_sites,
+    ),
+    Feature(
+        "refresh",
+        "Party Refresh",
+        ("--refresh",),
+        "gameplay_patches.patch_party_refresh",
+        _refresh_sites,
     ),
     Feature(
         "shop",

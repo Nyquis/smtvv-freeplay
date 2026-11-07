@@ -269,6 +269,7 @@ BTL_STEP_PRE = 3
 BTL_STEP_READY = 2  # E_BTL_STEP_READY .. E_BTL_STEP_START_EVENT run once per
 BTL_STEP_START_EVENT = 5  # battle, before the first turn
 BTL_STEP_END_EVENT = 24  # E_BTL_STEP_END_EVENT .. FINISH_WAIT close a battle
+BTL_STEP_FINISH_WAIT = 31  # the battle's last step
 
 ITEM_GET = 0x140ACE9A0  # ItemGet(id, count)  (adds)
 ITEM_GET_MAX = 0x140ACF220  # ItemGetMaxNum(id) -> int
@@ -284,7 +285,7 @@ REFILL_ID_MAX = 135  # use items are 1..135
 
 DEFER_SETNEXTSTEP = False
 DEFERRED_STEPS: dict[str, int] = {}
-STEP_ORDER = ("refill", "stockpile", "magatsuhi", "autosave")
+STEP_ORDER = ("refill", "stockpile", "magatsuhi", "refresh", "autosave")
 
 
 def patch_setnextstep(data: bytearray, caves: list[list[int]]) -> bool:
@@ -464,6 +465,27 @@ def patch_magatsuhi(
             5,
         )
     return True
+
+
+# ---------------------------------------------------------------------------
+# Party Refresh: restore the party's HP/MP on every battle step
+# ---------------------------------------------------------------------------
+def patch_party_refresh(
+    data: bytearray, caves: list[list[int]], party_cure_va: int
+) -> int:
+    """Build and place the refresh step body; return its entry VA."""
+
+    def build(a):
+        a.raw("53 48 83 EC 20 48 89 CB")  # push rbx; sub rsp,20h; mov rbx,rcx
+        a.raw("0F B6 83" + struct.pack("<I", BTL_NEXTSTEP_OFF).hex())
+        a.raw("83 F8 %02x" % BTL_STEP_FINISH_WAIT)
+        a.ja("done")
+        a.call(party_cure_va)
+        a.label("done")
+        a.raw("48 83 C4 20 5B C3")
+        return a
+
+    return put_code(data, caves, build)
 
 
 # ---------------------------------------------------------------------------
