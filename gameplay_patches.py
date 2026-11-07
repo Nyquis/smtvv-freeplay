@@ -119,6 +119,9 @@ class Asm:
     def ja(self, t):
         return self._rel("0F87", t)
 
+    def jae(self, t):
+        return self._rel("0F83", t)
+
     def j8(self, opcode: str, label: str) -> Asm:
         """Short jump (one opcode byte, rel8) to a label."""
         self.raw(opcode)
@@ -218,26 +221,35 @@ def slack_caves(data: bytearray) -> list[list[int]]:
 
 
 def put_code(data: bytearray, caves: list[list[int]], build) -> int:
-    """Place the code from build(Asm) in the first cave slot that fits.
+    """Place the code from build(Asm) in the tightest cave that fits.
 
     Each entry is [file start, file end, va_delta], where va_delta is
     (VA - file offset) for that section, not a displacement into the cave.
-    Slots containing a reference are skipped in 16-byte steps, so a cave
-    split by branch targets can still be used.
+    The first reference-free slot in each cave is considered, and the cave
+    with the least remaining space wins. This keeps large caves available
+    without breaking the first-slot placement inside a cave.
     """
+    best: tuple[int, list[int], int, int, bytes] | None = None
     for c in caves:
+        va_delta = c[2]
         pos = c[0]
         slots = max(1, (c[1] - c[0]) // 16 + 1)
         for _ in range(slots):
-            dest = pos + c[2]
+            dest = pos + va_delta
             code = build(Asm(dest)).build()
             if pos + len(code) > c[1]:
                 break
             if not _range_has_reference(dest, len(code)):
-                c[0] = _place(data, pos, c[1], code, base_va=dest)
-                return dest
+                remaining = c[1] - (pos + len(code))
+                if best is None or remaining < best[0]:
+                    best = (remaining, c, pos, dest, code)
+                break
             pos = (pos + 16) & ~15
-    raise RuntimeError("code cave too small")
+    if best is None:
+        raise RuntimeError("code cave too small")
+    _remaining, c, pos, dest, code = best
+    c[0] = _place(data, pos, c[1], code, base_va=dest)
+    return dest
 
 
 # ---------------------------------------------------------------------------
@@ -639,22 +651,11 @@ def patch_refocus(data: bytearray, caves: list[list[int]]) -> int | None:
     def u32(v):
         return struct.pack("<I", v).hex()
 
-    def build(a):
-        def post(msg, wparam):
-            a.raw("48 89 D9 BA" + u32(msg) + "41 B8" + u32(wparam) + "45 31 C9")
-            a._rel("FF15", IAT_POST_MESSAGE)
+    def post_code(a, msg, wparam):
+        a.raw("48 89 D9 BA" + u32(msg) + "41 B8" + u32(wparam) + "45 31 C9")
+        a._rel("FF15", IAT_POST_MESSAGE)
 
-        a._rel("8A 05", REFOCUS_DONE).raw("84 C0").jne("orig")
-        a.raw("B0 01")._rel("88 05", REFOCUS_DONE)
-        a.raw("48 83 EC 38 31 C9 31 D2")
-        a._rel("4C 8D 05", "thread")
-        a.raw("45 31 C9 48 C7 44 24 20 00 00 00 00 48 C7 44 24 28 00 00 00 00")
-        a._rel("FF15", IAT_CREATE_THREAD)
-        a.raw("48 83 C4 38")
-        a.label("orig")
-        a._rel("0F B6 05", TITLE_TICK_FLAG).raw("C3")
-
-        a.label("thread")
+    def build_thread(a):
         a.raw("53 48 83 EC 30")
         a.raw("B9" + u32(REFOCUS_DELAY_MS))._rel("FF15", IAT_SLEEP)
         a._rel("FF15", IAT_GET_FOREGROUND_WINDOW)
@@ -662,15 +663,29 @@ def patch_refocus(data: bytearray, caves: list[list[int]]) -> int | None:
         a.raw("48 89 C1 48 8D 54 24 28")._rel("FF15", IAT_GET_WINDOW_THREAD_PID)
         a._rel("FF15", IAT_GET_CURRENT_PID)
         a.raw("3B 44 24 28").jne("done")
-        post(WM_ACTIVATE, 0)
-        post(WM_ACTIVATEAPP, 0)
+        post_code(a, WM_ACTIVATE, 0)
+        post_code(a, WM_ACTIVATEAPP, 0)
         a.raw("B9" + u32(REFOCUS_GAP_MS))._rel("FF15", IAT_SLEEP)
-        post(WM_ACTIVATEAPP, 1)
-        post(WM_ACTIVATE, 1)
+        post_code(a, WM_ACTIVATEAPP, 1)
+        post_code(a, WM_ACTIVATE, 1)
         a.label("done")
         a.raw("31 C0 48 83 C4 30 5B C3")
         return a
 
-    dest = put_code(data, caves, build)
+    thread_va = put_code(data, caves, build_thread)
+
+    def build_hook(a):
+        a._rel("8A 05", REFOCUS_DONE).raw("84 C0").jne("orig")
+        a.raw("B0 01")._rel("88 05", REFOCUS_DONE)
+        a.raw("48 83 EC 38 31 C9 31 D2")
+        a._rel("4C 8D 05", thread_va)
+        a.raw("45 31 C9 48 C7 44 24 20 00 00 00 00 48 C7 44 24 28 00 00 00 00")
+        a._rel("FF15", IAT_CREATE_THREAD)
+        a.raw("48 83 C4 38")
+        a.label("orig")
+        a._rel("0F B6 05", TITLE_TICK_FLAG).raw("C3")
+        return a
+
+    dest = put_code(data, caves, build_hook)
     _jmp_site(data, site_va, dest, 8)
     return dest

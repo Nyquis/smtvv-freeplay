@@ -41,9 +41,14 @@ AUTOSAVE_PENDING = 0x1549A9A08   # field updates left before saving (0 = none du
 AUTOSAVE_COUNT   = 0x1549A9A0C   # saves written this session
 AUTOSAVE_RESULT  = 0x1549A9A10   # result of the last save
 AUTOSAVE_BUSY    = 0x1549A9A14   # nonzero while the autosave runs
+AUTOSAVE_LOCATION = 0x1549A9A18  # captured MapAreaName row index
+AUTOSAVE_LOCATION_VALID = 0x1549A9A1C  # location has been captured
+AUTOSAVE_RETRY   = 0x1549A9A1D   # retries used by the current autosave
 # Field updates to wait after the battle's last step, so the battle has
 # written its results back before the save.
 AUTOSAVE_DELAY   = 120
+AUTOSAVE_RETRY_DELAY = 30
+AUTOSAVE_MAX_RETRIES = 3
 
 SLOT_MIN, SLOT_MAX = 1, 20
 
@@ -165,6 +170,8 @@ def patch_autosave(data: bytearray, caves: list[list[int]], slot: int,
         a.jne("done")
         a.raw("B8" + struct.pack("<I", AUTOSAVE_DELAY).hex())
         a._rel("89 05", AUTOSAVE_PENDING)            # mov [pending], eax
+        a._rel("C6 05", AUTOSAVE_LOCATION_VALID).raw("00")
+        a._rel("C6 05", AUTOSAVE_RETRY).raw("00")
         a.label("done")
         a.raw("48 83 C4 20 5B C3")
         return a
@@ -182,30 +189,6 @@ def patch_autosave(data: bytearray, caves: list[list[int]], slot: int,
                 put_code(data, caves, lambda a, prev=prev: step_hook(a, prev, True)),
                 5,
             )
-
-    # Field update: count down, then save.
-    def tick_hook(a):
-        a._rel("8B 05", AUTOSAVE_PENDING)                # mov eax, [pending]
-        a.raw("85 C0").je("go")
-        a._rel("FF 0D", AUTOSAVE_PENDING)                # dec dword [pending]
-        a.jne("go")
-        a.raw("51 52 41 50 41 51 48 83 EC 68")           # keep the argument registers
-        for i in range(4):                               # movdqu [rsp+20h+i*16], xmm0..3
-            a.raw("F3 0F 7F %02X 24 %02X" % (0x44 | (i << 3), 0x20 + 16 * i))
-        a.raw("B0 01")._rel("88 05", AUTOSAVE_BUSY)    # mov al,1; mov [busy],al
-        a.raw("B9" + struct.pack("<I", slot - 1).hex())  # mov ecx, list index
-        a.call(SAVE_SLOT_NATIVE)
-        a._rel("88 05", AUTOSAVE_RESULT)
-        a.raw("31 C0")._rel("88 05", AUTOSAVE_BUSY)
-        a._rel("FF 05", AUTOSAVE_COUNT)
-        for i in range(4):
-            a.raw("F3 0F 6F %02X 24 %02X" % (0x44 | (i << 3), 0x20 + 16 * i))
-        a.raw("48 83 C4 68 41 59 41 58 5A 59")
-        a.label("go")
-        a.jmp(FIELD_TICK_FN)
-        return a
-
-    _jmp_site(data, FIELD_TICK_SITE, put_code(data, caves, tick_hook), 5, opcode=0xE8)
 
     # Location: hash the field's current area label and find it among the
     # MapAreaName row hashes; no match leaves the location at 0 ("Unused").
@@ -244,13 +227,59 @@ def patch_autosave(data: bytearray, caves: list[list[int]], slot: int,
             a.label("row")
             a.raw("FF C9").j8("78", "done")
             a.raw("66 41 3B 04 49").j8("75", "row")
-            a.raw("89 4B %02X" % HDR_LOCATION)
+            a._rel("89 0D", AUTOSAVE_LOCATION)            # mov [location], ecx
             a.label("done")
             a.raw("48 83 C4 20 5E C3")                   # add rsp, 20h; pop rsi; ret
             return a
 
         loc_fn = put_code(data, caves, location)
         data[tbl:tbl + 2 * len(hashes)] = struct.pack("<%dH" % len(hashes), *hashes)
+
+    # Field update: capture the location once, then count down and save.
+    def tick_hook(a):
+        a._rel("8B 05", AUTOSAVE_PENDING)                # mov eax, [pending]
+        a.raw("85 C0").je("go")
+        if loc_fn:
+            a._rel("80 3D", AUTOSAVE_LOCATION_VALID).raw("00")
+            a.jne("have_location")
+            a.raw("51 52 41 50 41 51 48 83 EC 68")       # keep the argument registers
+            for i in range(4):
+                a.raw("F3 0F 7F %02X 24 %02X" % (0x44 | (i << 3), 0x20 + 16 * i))
+            a.call(loc_fn)
+            for i in range(4):
+                a.raw("F3 0F 6F %02X 24 %02X" % (0x44 | (i << 3), 0x20 + 16 * i))
+            a.raw("48 83 C4 68 41 59 41 58 5A 59")
+            a._rel("C6 05", AUTOSAVE_LOCATION_VALID).raw("01")
+            a.label("have_location")
+        a._rel("FF 0D", AUTOSAVE_PENDING)                # dec dword [pending]
+        a.jne("go")
+        a.raw("51 52 41 50 41 51 48 83 EC 68")           # keep the argument registers
+        for i in range(4):                               # movdqu [rsp+20h+i*16], xmm0..3
+            a.raw("F3 0F 7F %02X 24 %02X" % (0x44 | (i << 3), 0x20 + 16 * i))
+        a.raw("B0 01")._rel("88 05", AUTOSAVE_BUSY)    # mov al,1; mov [busy],al
+        a.raw("B9" + struct.pack("<I", slot - 1).hex())  # mov ecx, list index
+        a.call(SAVE_SLOT_NATIVE)
+        a._rel("88 05", AUTOSAVE_RESULT)
+        a.raw("84 C0").je("retry")
+        a._rel("FF 05", AUTOSAVE_COUNT)
+        a._rel("C6 05", AUTOSAVE_RETRY).raw("00")
+        a.jmp("clear_busy")
+        a.label("retry")
+        a._rel("80 3D", AUTOSAVE_RETRY).raw(f"{AUTOSAVE_MAX_RETRIES:02x}")
+        a.jae("clear_busy")
+        a._rel("FE 05", AUTOSAVE_RETRY)
+        a.raw("B8" + struct.pack("<I", AUTOSAVE_RETRY_DELAY).hex())
+        a._rel("89 05", AUTOSAVE_PENDING)
+        a.label("clear_busy")
+        a.raw("31 C0")._rel("88 05", AUTOSAVE_BUSY)
+        for i in range(4):
+            a.raw("F3 0F 6F %02X 24 %02X" % (0x44 | (i << 3), 0x20 + 16 * i))
+        a.raw("48 83 C4 68 41 59 41 58 5A 59")
+        a.label("go")
+        a.jmp(FIELD_TICK_FN)
+        return a
+
+    _jmp_site(data, FIELD_TICK_SITE, put_code(data, caves, tick_hook), 5, opcode=0xE8)
 
     # Save object build: while the autosave runs, fill the header the way a
     # menu save does.
@@ -281,8 +310,8 @@ def patch_autosave(data: bytearray, caves: list[list[int]], slot: int,
         a.j8("EB", "scan")
         a.label("store")
         a.raw("66 89 43 %02X" % (HDR_LANGUAGE + 1))      # mov [rbx+76h], ax
-        if loc_fn:
-            a.call(loc_fn)
+        a._rel("8B 05", AUTOSAVE_LOCATION)               # mov eax, [location]
+        a.raw("89 43 %02X" % HDR_LOCATION)               # mov [rbx+60h], eax
         a.raw("48 83 C4 20 5B C3")                       # add rsp, 20h; pop rbx; ret
         return a
 

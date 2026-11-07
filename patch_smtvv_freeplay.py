@@ -104,7 +104,7 @@ from patch_manifest import LEGACY_MAP_PAK, MIRACLE_PAK
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.24.0"
+MOD_VERSION = "5.25.0"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -315,6 +315,9 @@ def _scratch_regions() -> list[tuple[str, int, int]]:
         ("AUTOSAVE_COUNT", autosave.AUTOSAVE_COUNT, 4),
         ("AUTOSAVE_RESULT", autosave.AUTOSAVE_RESULT, 1),
         ("AUTOSAVE_BUSY", autosave.AUTOSAVE_BUSY, 1),
+        ("AUTOSAVE_LOCATION", autosave.AUTOSAVE_LOCATION, 4),
+        ("AUTOSAVE_LOCATION_VALID", autosave.AUTOSAVE_LOCATION_VALID, 1),
+        ("AUTOSAVE_RETRY", autosave.AUTOSAVE_RETRY, 1),
         ("MAGATSUHI_ACTOR", gameplay_patches.MAGATSUHI_ACTOR, 8),
         ("MAGATSUHI_ARRAY", gameplay_patches.MAGATSUHI_ARRAY, 8),
         ("REFOCUS_DONE", gameplay_patches.REFOCUS_DONE, 1),
