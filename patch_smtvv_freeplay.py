@@ -105,7 +105,7 @@ from patch_manifest import LEGACY_MAP_PAK, MIRACLE_PAK
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.27.0"
+MOD_VERSION = "5.28.0"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -1782,6 +1782,9 @@ def main() -> None:
             print(f"    {key:<14} {cave_budget[key]:>5} bytes")
         free = max(0, cave_off + cave_len - next_cave_off)
         print(f"    {'free':<14} {free:>5} bytes of {cave_len}")
+        if slack:
+            slack_free = sum(max(0, c[1] - c[0]) for c in slack)
+            print(f"    {'slack free':<14} {slack_free:>5} bytes")
         if free < 32:
             print("    WARNING: main code cave is nearly full; new hooks may not fit")
 

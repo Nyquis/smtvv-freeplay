@@ -264,6 +264,16 @@ def test_feature_registry_keys_are_unique_and_ordered():
     assert set(patch_manifest.STATIC_FEATURES) <= set(patch_manifest.FEATURE_KEYS)
 
 
+def test_registry_declares_known_safety_requirements():
+    safety = {feature.key: feature.safety for feature in patch_manifest.FEATURES}
+    assert "PartyAllCure signature" in safety["heal"]
+    assert "PartyAllCure signature" in safety["refresh"]
+    assert "IAT imports" in safety["jump"]
+    assert "IAT imports" in safety["intro"]
+    assert "GAME_INSTANCE" in safety["autosave"]
+    assert "ITEM_MENU_ROWS" in safety["stockpile"]
+
+
 def test_feature_apply_paths_resolve():
     import importlib
 

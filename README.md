@@ -12,7 +12,7 @@ Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
 > commitment. Back up your saves and use it at your own risk. This project is
 > not affiliated with ATLUS or SEGA.
 
-**Current version: 5.27.0**
+**Current version: 5.28.0**
 
 ## Features
 

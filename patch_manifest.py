@@ -153,6 +153,7 @@ class Feature:
     sites: Callable[[bytes | bytearray], list[tuple[int, int]]] | None = None
     dynamic: Callable[[bytes | bytearray], list[tuple[int, int]]] | None = None
     pak: str | None = None
+    safety: tuple[str, ...] = ()
 
 
 FEATURES = (
@@ -163,7 +164,14 @@ FEATURES = (
         "patcher:essences",
         _essences_sites,
     ),
-    Feature("heal", "Leyline Auto-Heal", ("--no-heal",), "patcher:heal", _heal_sites),
+    Feature(
+        "heal",
+        "Leyline Auto-Heal",
+        ("--no-heal",),
+        "patcher:heal",
+        _heal_sites,
+        safety=("PartyAllCure signature",),
+    ),
     Feature("mimans", "Miman Reveal", ("--no-mimans",), "patcher:mimans", _miman_sites),
     Feature(
         "leylines",
@@ -202,6 +210,7 @@ FEATURES = (
         _stockpile_sites,
         _stockpile_dynamic,
         stockpile.STOCK_PAK,
+        safety=("ITEM_MENU_ROWS", "MAX_SLOTS"),
     ),
     Feature(
         "jump",
@@ -209,6 +218,7 @@ FEATURES = (
         ("--no-jump",),
         "gameplay_patches.patch_jump",
         _jump_sites,
+        safety=("IAT imports",),
     ),
     Feature(
         "magatsuhi",
@@ -223,6 +233,7 @@ FEATURES = (
         ("--refresh",),
         "gameplay_patches.patch_party_refresh",
         _refresh_sites,
+        safety=("PartyAllCure signature",),
     ),
     Feature(
         "shop",
@@ -244,6 +255,7 @@ FEATURES = (
         "gameplay_patches.patch_refocus",
         _intro_sites,
         pak=boot_pak.BOOT_PAK,
+        safety=("IAT imports",),
     ),
     Feature(
         "masakado",
@@ -280,6 +292,7 @@ FEATURES = (
         ("--autosave-slot",),
         "autosave.patch_autosave",
         _autosave_sites,
+        safety=("GAME_INSTANCE", "CURRENT_LANGUAGE"),
     ),
 )
 
