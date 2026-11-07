@@ -104,7 +104,7 @@ from patch_manifest import LEGACY_MAP_PAK, MIRACLE_PAK
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.22.2"
+MOD_VERSION = "5.23.0"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -216,6 +216,14 @@ def _heal_code(party_cure_va: int, orig_tgt: int, dest_va: int) -> bytes:
     return bytes(code)
 
 
+def _heal_cure_target(data: bytearray) -> int | None:
+    """VA of PartyAllCure for this build, or None when its prologue is missing."""
+    site = signatures.resolve(
+        data, gameplay_patches.off(PARTY_ALL_CURE_VA), PARTY_ALL_CURE_ORIG
+    )
+    return None if site is None else file_to_va(site)
+
+
 IMAGE_SCN_MEM_EXECUTE = 0x20000000
 CAVE_PREFIX = 64  # bytes of a candidate checked for live references
 CAVE_REF_MARGIN = 16  # bytes after a reference that must stay untouched
@@ -295,6 +303,22 @@ def _assert_writable(data: bytes | bytearray, va: int, label: str) -> None:
     if not flags & 0x80000000:
         print(f"\n  ERROR: {label} (0x{va:X}) is in non-writable section {name}")
         sys.exit(1)
+
+
+def _scratch_regions() -> list[tuple[str, int, int]]:
+    """Writable scratch used by the patches: (label, VA, size)."""
+    return [
+        ("STOCK_ACTIVE", stockpile.STOCK_ACTIVE, 1),
+        ("STOCK_LAST_ID", stockpile.STOCK_LAST_ID, 4),
+        ("STOCK_HIDDEN", stockpile.STOCK_HIDDEN, stockpile.ID_MAX + 1),
+        ("AUTOSAVE_PENDING", autosave.AUTOSAVE_PENDING, 4),
+        ("AUTOSAVE_COUNT", autosave.AUTOSAVE_COUNT, 4),
+        ("AUTOSAVE_RESULT", autosave.AUTOSAVE_RESULT, 1),
+        ("AUTOSAVE_BUSY", autosave.AUTOSAVE_BUSY, 1),
+        ("MAGATSUHI_ACTOR", gameplay_patches.MAGATSUHI_ACTOR, 8),
+        ("MAGATSUHI_ARRAY", gameplay_patches.MAGATSUHI_ARRAY, 8),
+        ("REFOCUS_DONE", gameplay_patches.REFOCUS_DONE, 1),
+    ]
 
 
 def _reference_sets(
@@ -1047,16 +1071,10 @@ def main() -> None:
         )
         if not info["safe"]:
             print("  WARNING: cave safety checks did not all pass")
-    for label, addr in (
-        ("STOCK_ACTIVE", stockpile.STOCK_ACTIVE),
-        ("STOCK_LAST_ID", stockpile.STOCK_LAST_ID),
-        ("STOCK_HIDDEN", stockpile.STOCK_HIDDEN),
-        ("AUTOSAVE_PENDING", autosave.AUTOSAVE_PENDING),
-        ("AUTOSAVE_COUNT", autosave.AUTOSAVE_COUNT),
-        ("AUTOSAVE_RESULT", autosave.AUTOSAVE_RESULT),
-        ("AUTOSAVE_BUSY", autosave.AUTOSAVE_BUSY),
-    ):
+    for label, addr, size in _scratch_regions():
         _assert_writable(data, addr, label)
+        offset = gameplay_patches.off(addr)
+        data[offset : offset + size] = b"\0" * size
     next_cave_off = cave_off
     cave_mark = cave_off
     patch_num = 0
@@ -1135,14 +1153,20 @@ def main() -> None:
 
         for i in range(len(sc)):
             assert data[p_off + i] == 0xCC
-        data[p_off : p_off + len(sc)] = sc
+        next_cave_off = gameplay_patches._place(
+            data,
+            p_off,
+            cave_off + cave_len,
+            bytes(sc),
+            base_va=p_va,
+            check_refs=True,
+        )
         struct.pack_into("<i", data, TRAMP_OFFSET + 1, p_va - (tramp_va + 5))
 
         patch_num += 1
         print(f"\n  [{patch_num}/{total}] Reusable Essences")
         print(f"    Code cave     : 0x{p_off:08X}  ({len(sc)} bytes)")
         print(f"    Trampoline    : 0x{TRAMP_OFFSET:08X}  -> cave")
-        next_cave_off = p_off + ((len(sc) + 15) & ~15)
         ok("essences")
 
     # ==================================================================
@@ -1150,8 +1174,16 @@ def main() -> None:
     # ==================================================================
     if do_heal:
         ry_actual = bytes(data[RYUKETSU_TRAMP_OFFSET : RYUKETSU_TRAMP_OFFSET + 5])
+        cure_va = (
+            _heal_cure_target(data)
+            if ry_actual == RYUKETSU_TRAMP_ORIG
+            else None
+        )
         if ry_actual != RYUKETSU_TRAMP_ORIG:
             print("\n  WARNING: Leyline AOB mismatch - skipping heal patch")
+            fail("heal")
+        elif cure_va is None:
+            print("\n  WARNING: PartyAllCure AOB mismatch - skipping heal patch")
             fail("heal")
         else:
             ry_disp = struct.unpack_from("<i", data, RYUKETSU_TRAMP_OFFSET + 1)[0]
@@ -1160,7 +1192,7 @@ def main() -> None:
 
             h_off = next_cave_off
             h_va = file_to_va(h_off)
-            hsc = _heal_code(PARTY_ALL_CURE_VA, ry_orig_tgt, h_va)
+            hsc = _heal_code(cure_va, ry_orig_tgt, h_va)
             next_cave_off = gameplay_patches._place(
                 data,
                 h_off,
@@ -1253,6 +1285,7 @@ def main() -> None:
             ma_tgt = ma_va + 5 + ma_disp
 
             mc1 = next_cave_off
+            mc1_va = file_to_va(mc1)
             sc_a = bytearray()
             je_a = []
             for mid in MIRACLE_UNLOCK_IDS:
@@ -1260,20 +1293,24 @@ def main() -> None:
                 je_a.append(len(sc_a))
                 sc_a += b"\x00"
             sc_a += b"\xe9"
-            sc_a += struct.pack("<i", ma_tgt - (file_to_va(mc1) + len(sc_a) + 4))
+            sc_a += struct.pack("<i", ma_tgt - (mc1_va + len(sc_a) + 4))
             yes_a = len(sc_a)
             for jp in je_a:
                 sc_a[jp] = yes_a - (jp + 1)
             sc_a += b"\xb0\x01\xc3"
 
-            for i in range(len(sc_a)):
-                assert data[mc1 + i] == 0xCC
-            data[mc1 : mc1 + len(sc_a)] = sc_a
+            next_cave_off = gameplay_patches._place(
+                data,
+                mc1,
+                cave_off + cave_len,
+                bytes(sc_a),
+                base_va=mc1_va,
+                check_refs=True,
+            )
             data[MIRACLE_ADDED_TRAMP] = 0xE9
             struct.pack_into(
-                "<i", data, MIRACLE_ADDED_TRAMP + 1, file_to_va(mc1) - (ma_va + 5)
+                "<i", data, MIRACLE_ADDED_TRAMP + 1, mc1_va - (ma_va + 5)
             )
-            next_cave_off = mc1 + ((len(sc_a) + 15) & ~15)
 
             # Hook GetGodParameterSkillState -> return 4 (purchasable)
             ms_disp = struct.unpack_from("<i", data, MIRACLE_STATE_TRAMP + 1)[0]
@@ -1281,6 +1318,7 @@ def main() -> None:
             ms_tgt = ms_va + 5 + ms_disp
 
             mc2 = next_cave_off
+            mc2_va = file_to_va(mc2)
             sc_s = bytearray()
             je_s = []
             for mid in MIRACLE_UNLOCK_IDS:
@@ -1288,20 +1326,24 @@ def main() -> None:
                 je_s.append(len(sc_s))
                 sc_s += b"\x00"
             sc_s += b"\xe9"
-            sc_s += struct.pack("<i", ms_tgt - (file_to_va(mc2) + len(sc_s) + 4))
+            sc_s += struct.pack("<i", ms_tgt - (mc2_va + len(sc_s) + 4))
             yes_s = len(sc_s)
             for jp in je_s:
                 sc_s[jp] = yes_s - (jp + 1)
             sc_s += b"\xb0\x04\xc3"
 
-            for i in range(len(sc_s)):
-                assert data[mc2 + i] == 0xCC
-            data[mc2 : mc2 + len(sc_s)] = sc_s
+            next_cave_off = gameplay_patches._place(
+                data,
+                mc2,
+                cave_off + cave_len,
+                bytes(sc_s),
+                base_va=mc2_va,
+                check_refs=True,
+            )
             data[MIRACLE_STATE_TRAMP] = 0xE9
             struct.pack_into(
-                "<i", data, MIRACLE_STATE_TRAMP + 1, file_to_va(mc2) - (ms_va + 5)
+                "<i", data, MIRACLE_STATE_TRAMP + 1, mc2_va - (ms_va + 5)
             )
-            next_cave_off = mc2 + ((len(sc_s) + 15) & ~15)
 
             patch_num += 1
             print(f"\n  [{patch_num}/{total}] NG+ Miracles Unlock")

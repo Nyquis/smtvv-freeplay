@@ -37,3 +37,17 @@ def test_heal_code_does_not_put_saved_registers_in_shadow_space():
     # the callee's shadow space and PartyAllCure overwrites them.
     assert b"\x48\x83\xec\x20" in code
     assert b"\x48\x83\xc4\x20" in code
+
+
+def test_heal_cure_target_resolves_and_reports_missing(monkeypatch):
+    import gameplay_patches as gp
+
+    monkeypatch.setattr(gp, "off", lambda value: value)
+    monkeypatch.setattr(gp, "va", lambda value: value)
+
+    data = bytearray(0x1000)
+    data[0x300 : 0x300 + len(patcher.PARTY_ALL_CURE_ORIG)] = patcher.PARTY_ALL_CURE_ORIG
+    assert patcher._heal_cure_target(data) == 0x300
+
+    data[0x300] ^= 0xFF
+    assert patcher._heal_cure_target(data) is None

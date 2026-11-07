@@ -158,12 +158,10 @@ def _patch_stockpile(data: bytearray, cave_off: int, cave_end: int,
     table_size = (len(limits) + 15) & ~15
     if cave_off + table_size > cave_end:
         return None
-    for i in range(len(limits)):
-        if data[cave_off + i] != 0xCC:
-            return None
     limits_va = va(cave_off)
-    data[cave_off : cave_off + len(limits)] = limits
-    cave_off += table_size
+    cave_off = _place(
+        data, cave_off, cave_end, limits, base_va=limits_va, check_refs=True
+    )
 
     # ItemGetNum: subtract the hidden stock while a battle is running, and
     # re-clamp when a Boss Rush refill lands after the PRE snapshot.
