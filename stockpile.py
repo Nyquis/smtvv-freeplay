@@ -29,9 +29,23 @@ from __future__ import annotations
 import os
 import struct
 
-from gameplay_patches import (Asm, BTL_NEXTSTEP_OFF, BTL_STEP_END_EVENT, BTL_STEP_PRE, ITEM_GET_MAX,
-                              ITEM_GET_MAX_ORIG, ITEM_GET_NUM, ITEM_GET_NUM_ORIG, SETNEXTSTEP_ORIG,
-                              SETNEXTSTEP_THUNKS, _jmp_site, _place, va, off)
+import gameplay_patches
+from gameplay_patches import (
+    BTL_NEXTSTEP_OFF,
+    BTL_STEP_END_EVENT,
+    BTL_STEP_PRE,
+    ITEM_GET_MAX,
+    ITEM_GET_MAX_ORIG,
+    ITEM_GET_NUM,
+    ITEM_GET_NUM_ORIG,
+    SETNEXTSTEP_ORIG,
+    SETNEXTSTEP_THUNKS,
+    Asm,
+    _jmp_site,
+    _place,
+    off,
+    va,
+)
 from shop_pak import ITEM_ID_OFF, ITEM_ROW, ITEM_TABLE, _section
 
 STOCK_PAK = "pakchunk93_FreeplayStockpile_P.pak"
@@ -193,37 +207,52 @@ def _patch_stockpile(data: bytearray, cave_off: int, cave_end: int,
     _jmp_site(data, ITEM_GET_NUM, dest, 5)
 
     # SetNextStep: record the hidden stock at PRE, stop hiding at END_EVENT.
-    for t in SETNEXTSTEP_THUNKS:
-        prev = t + 5 + struct.unpack_from("<i", data, off(t) + 1)[0]
-        a = Asm(va(cave_off))
-        a.raw("53 56 57 48 83 EC 20 48 89 CB")    # push rbx/rsi/rdi; sub rsp,20h; mov rbx,rcx
-        a.call(prev)
-        a.raw("0F B6 83" + u32(BTL_NEXTSTEP_OFF))  # movzx eax, m_NextStep
-        a.raw("83 F8 %02x" % BTL_STEP_PRE).jne("end")
-        a.raw("BE 01 00 00 00")                   # mov esi, 1
-        a.label("loop")
-        a._rel("48 8D 05", limits_va)
-        a.raw("0F B6 3C 30")                      # movzx edi, byte [rax+rsi]
-        a.raw("31 C0 85 FF").je("store")          # no limit: hide nothing
-        a.raw("89 F1").call(num_orig)
-        a.raw("29 F8")                            # sub eax, edi
-        a._rel("0F 8F", "store")                  # jg store
-        a.raw("31 C0")
-        a.label("store")
-        a._rel("48 8D 0D", STOCK_HIDDEN)
-        a.raw("88 04 31")                         # mov [rcx+rsi], al
-        a.raw("FF C6 81 FE" + u32(ID_MAX)).jle("loop")
-        a.raw("B0 01")._rel("88 05", STOCK_ACTIVE)
-        a.jmp("done")
-        a.label("end")
-        a.raw("83 F8 %02x" % BTL_STEP_END_EVENT)
-        a._rel("0F 82", "done")                   # jb done
-        a.raw("31 C0")._rel("88 05", STOCK_ACTIVE)
-        a.label("done")
-        a.raw("48 83 C4 20 5F 5E 5B C3")
+    def step_build(prev=None, call_prev=True):
+        def build(a):
+            a.raw("53 56 57 48 83 EC 20 48 89 CB")    # push rbx/rsi/rdi; sub rsp,20h; mov rbx,rcx
+            if call_prev:
+                a.call(prev)
+            a.raw("0F B6 83" + u32(BTL_NEXTSTEP_OFF))  # movzx eax, m_NextStep
+            a.raw("83 F8 %02x" % BTL_STEP_PRE).jne("end")
+            a.raw("BE 01 00 00 00")                   # mov esi, 1
+            a.label("loop")
+            a._rel("48 8D 05", limits_va)
+            a.raw("0F B6 3C 30")                      # movzx edi, byte [rax+rsi]
+            a.raw("31 C0 85 FF").je("store")          # no limit: hide nothing
+            a.raw("89 F1").call(num_orig)
+            a.raw("29 F8")                            # sub eax, edi
+            a._rel("0F 8F", "store")                  # jg store
+            a.raw("31 C0")
+            a.label("store")
+            a._rel("48 8D 0D", STOCK_HIDDEN)
+            a.raw("88 04 31")                         # mov [rcx+rsi], al
+            a.raw("FF C6 81 FE" + u32(ID_MAX)).jle("loop")
+            a.raw("B0 01")._rel("88 05", STOCK_ACTIVE)
+            a.jmp("done")
+            a.label("end")
+            a.raw("83 F8 %02x" % BTL_STEP_END_EVENT)
+            a._rel("0F 82", "done")                   # jb done
+            a.raw("31 C0")._rel("88 05", STOCK_ACTIVE)
+            a.label("done")
+            a.raw("48 83 C4 20 5F 5E 5B C3")
+            return a
+
+        return build
+
+    if gameplay_patches.DEFER_SETNEXTSTEP:
         dest = va(cave_off)
-        cave_off = _place(data, cave_off, cave_end, a.build())
-        _jmp_site(data, t, dest, 5)
+        cave_off = _place(
+            data, cave_off, cave_end, step_build(None, False)(Asm(dest)).build()
+        )
+        gameplay_patches.DEFERRED_STEPS["stockpile"] = dest
+    else:
+        for t in SETNEXTSTEP_THUNKS:
+            prev = t + 5 + struct.unpack_from("<i", data, off(t) + 1)[0]
+            dest = va(cave_off)
+            cave_off = _place(
+                data, cave_off, cave_end, step_build(prev, True)(Asm(dest)).build()
+            )
+            _jmp_site(data, t, dest, 5)
 
     # ItemGetMaxNum body: remember which item was asked for, and let the
     # game's carry checks see the stock limit for items with a normal limit.

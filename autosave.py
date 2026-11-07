@@ -12,7 +12,14 @@ from __future__ import annotations
 import os
 import struct
 
-from gameplay_patches import BTL_NEXTSTEP_OFF, SETNEXTSTEP_THUNKS, _jmp_site, off, put_code
+import gameplay_patches
+from gameplay_patches import (
+    BTL_NEXTSTEP_OFF,
+    SETNEXTSTEP_THUNKS,
+    _jmp_site,
+    off,
+    put_code,
+)
 
 SAVE_SLOT_NATIVE = 0x140B70210   # Save(list index) -> bool; 0..19 = save slots 1..20
 SAVE_SLOT_ORIG   = bytes.fromhex("4056 4881ec00020000 4863f1".replace(" ", ""))
@@ -150,21 +157,31 @@ def patch_autosave(data: bytearray, caves: list[list[int]], slot: int,
         return False
 
     # Battle end: arm the save.
-    for t in SETNEXTSTEP_THUNKS:
-        prev = t + 5 + struct.unpack_from("<i", data, off(t) + 1)[0]
-
-        def step_hook(a, prev=prev):
-            a.raw("53 48 83 EC 20 48 89 CB")              # push rbx; sub rsp,20h; mov rbx,rcx
+    def step_hook(a, prev, call_prev=True):
+        a.raw("53 48 83 EC 20 48 89 CB")              # push rbx; sub rsp,20h; mov rbx,rcx
+        if call_prev:
             a.call(prev)
-            a.raw("80 BB" + struct.pack("<I", BTL_NEXTSTEP_OFF).hex() + "%02x" % BTL_STEP_FINISH_WAIT)
-            a.jne("done")
-            a.raw("B8" + struct.pack("<I", AUTOSAVE_DELAY).hex())
-            a._rel("89 05", AUTOSAVE_PENDING)            # mov [pending], eax
-            a.label("done")
-            a.raw("48 83 C4 20 5B C3")
-            return a
+        a.raw("80 BB" + struct.pack("<I", BTL_NEXTSTEP_OFF).hex() + "%02x" % BTL_STEP_FINISH_WAIT)
+        a.jne("done")
+        a.raw("B8" + struct.pack("<I", AUTOSAVE_DELAY).hex())
+        a._rel("89 05", AUTOSAVE_PENDING)            # mov [pending], eax
+        a.label("done")
+        a.raw("48 83 C4 20 5B C3")
+        return a
 
-        _jmp_site(data, t, put_code(data, caves, step_hook), 5)
+    if gameplay_patches.DEFER_SETNEXTSTEP:
+        gameplay_patches.DEFERRED_STEPS["autosave"] = put_code(
+            data, caves, lambda a: step_hook(a, 0, False)
+        )
+    else:
+        for t in SETNEXTSTEP_THUNKS:
+            prev = t + 5 + struct.unpack_from("<i", data, off(t) + 1)[0]
+            _jmp_site(
+                data,
+                t,
+                put_code(data, caves, lambda a, prev=prev: step_hook(a, prev, True)),
+                5,
+            )
 
     # Field update: count down, then save.
     def tick_hook(a):

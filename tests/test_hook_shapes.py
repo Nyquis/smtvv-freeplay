@@ -36,3 +36,20 @@ def test_every_call_hook_keeps_its_safe_frame():
         text = (ROOT / filename).read_text(encoding="utf-8")
         assert prologue in text, (filename, prologue)
         assert epilogue in text, (filename, epilogue)
+
+
+def test_shared_setnextstep_dispatcher_is_wired():
+    gameplay = (ROOT / "gameplay_patches.py").read_text(encoding="utf-8")
+    assert "DEFER_SETNEXTSTEP" in gameplay
+    assert "DEFERRED_STEPS" in gameplay
+    assert "def patch_setnextstep" in gameplay
+    assert '"48 89 D9"' in gameplay  # mov rcx, rbx before each step call
+
+    for name in ("stockpile.py", "autosave.py"):
+        text = (ROOT / name).read_text(encoding="utf-8")
+        assert "DEFER_SETNEXTSTEP" in text, name
+        assert "DEFERRED_STEPS" in text, name
+
+    patcher = (ROOT / "patch_smtvv_freeplay.py").read_text(encoding="utf-8")
+    assert "DEFER_SETNEXTSTEP = True" in patcher
+    assert "patch_setnextstep" in patcher

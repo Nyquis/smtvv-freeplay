@@ -270,30 +270,42 @@ ITEM_IS_GOTTEN_ORIG = bytes.fromhex("e9fbb98e06")
 REFILL_ID_MAX = 135  # use items are 1..135
 
 
-def patch_refill(data: bytearray, cave_off: int, cave_end: int) -> int | None:
+DEFER_SETNEXTSTEP = False
+DEFERRED_STEPS: dict[str, int] = {}
+STEP_ORDER = ("refill", "stockpile", "magatsuhi", "autosave")
+
+
+def patch_setnextstep(data: bytearray, caves: list[list[int]]) -> bool:
+    """Install one dispatcher for every deferred SetNextStep behaviour."""
     for t in SETNEXTSTEP_THUNKS:
         if data[off(t) : off(t) + 5] != SETNEXTSTEP_ORIG:
-            return None
-    if data[off(ITEM_IS_USEBATTLE) : off(ITEM_IS_USEBATTLE) + 5] != bytes.fromhex(
-        "48895c2408"
-    ):
-        return None
-    for fn, expected in (
-        (ITEM_GET, ITEM_GET_ORIG),
-        (ITEM_GET_MAX, ITEM_GET_MAX_ORIG),
-        (ITEM_GET_NUM, ITEM_GET_NUM_ORIG),
-        (ITEM_IS_GOTTEN, ITEM_IS_GOTTEN_ORIG),
-    ):
-        if data[off(fn) : off(fn) + 5] != expected:
-            return None
-
+            return False
     for t in SETNEXTSTEP_THUNKS:
         orig = t + 5 + struct.unpack_from("<i", data, off(t) + 1)[0]
-        a = Asm(va(cave_off))
+
+        def hook(a, orig=orig):
+            a.raw("53 48 83 EC 20 48 89 CB")  # push rbx; sub rsp,20h; mov rbx,rcx
+            a.call(orig)
+            for key in STEP_ORDER:
+                target = DEFERRED_STEPS.get(key)
+                if target is None:
+                    continue
+                a.raw("48 89 D9")  # mov rcx, rbx
+                a.call(target)
+            a.raw("48 83 C4 20 5B C3")
+            return a
+
+        _jmp_site(data, t, put_code(data, caves, hook), 5)
+    return True
+
+
+def _refill_step(orig: int | None, call_orig: bool):
+    def build(a):
         a.raw("53 56 57")  # push rbx/rsi/rdi
         a.raw("48 83 EC 20")  # sub rsp, 20h
         a.raw("48 89 CB")  # mov rbx, rcx
-        a.call(orig)  # original SetNextStep
+        if call_orig:
+            a.call(orig)  # original SetNextStep
         a.raw("80 BB").raw(struct.pack("<I", BTL_NEXTSTEP_OFF).hex()).raw(
             f"{BTL_STEP_PRE:02x}"
         )
@@ -312,9 +324,42 @@ def patch_refill(data: bytearray, cave_off: int, cave_end: int) -> int | None:
         a.jle("loop")
         a.label("done")
         a.raw("48 83 C4 20 5F 5E 5B C3")
-        code = a.build()
+        return a
+
+    return build
+
+
+def patch_refill(data: bytearray, cave_off: int, cave_end: int) -> int | None:
+    for t in SETNEXTSTEP_THUNKS:
+        if data[off(t) : off(t) + 5] != SETNEXTSTEP_ORIG:
+            return None
+    if data[off(ITEM_IS_USEBATTLE) : off(ITEM_IS_USEBATTLE) + 5] != bytes.fromhex(
+        "48895c2408"
+    ):
+        return None
+    for fn, expected in (
+        (ITEM_GET, ITEM_GET_ORIG),
+        (ITEM_GET_MAX, ITEM_GET_MAX_ORIG),
+        (ITEM_GET_NUM, ITEM_GET_NUM_ORIG),
+        (ITEM_IS_GOTTEN, ITEM_IS_GOTTEN_ORIG),
+    ):
+        if data[off(fn) : off(fn) + 5] != expected:
+            return None
+
+    if DEFER_SETNEXTSTEP:
         dest = va(cave_off)
-        cave_off = _place(data, cave_off, cave_end, code)
+        cave_off = _place(
+            data, cave_off, cave_end, _refill_step(None, False)(Asm(dest)).build()
+        )
+        DEFERRED_STEPS["refill"] = dest
+        return cave_off
+
+    for t in SETNEXTSTEP_THUNKS:
+        orig = t + 5 + struct.unpack_from("<i", data, off(t) + 1)[0]
+        dest = va(cave_off)
+        cave_off = _place(
+            data, cave_off, cave_end, _refill_step(orig, True)(Asm(dest)).build()
+        )
         _jmp_site(data, t, dest, 5)
     return cave_off
 
@@ -361,40 +406,51 @@ def patch_magatsuhi(
     def u32(v):
         return struct.pack("<I", v).hex()
 
+    def hook(a, prev: int, chain: bool, call_prev: bool):
+        a.raw("53 48 83 EC 20 48 89 CB")  # push rbx; sub rsp,20h; mov rbx,rcx
+        if call_prev:
+            a.call(prev)
+        a.raw("0F B6 83" + u32(BTL_NEXTSTEP_OFF))  # movzx eax, byte [rbx+262h]
+        a.raw(
+            f"83 E8 {BTL_STEP_READY:02x} 83 F8 {BTL_STEP_START_EVENT - BTL_STEP_READY:02x}"
+        )
+        a.ja("done")  # opening steps only
+        a.raw("48 8B 93" + u32(BTL_GAUGES_OFF))  # mov rdx, [rbx+540h]
+        a.raw("48 85 D2").je("done")
+        if chain:
+            # A chain reuses the battle actor and its gauge array.
+            a._rel("48 39 1D", MAGATSUHI_ACTOR)  # cmp [actor], rbx
+            a.jne("fill")
+            a._rel("48 39 15", MAGATSUHI_ARRAY)  # cmp [array], rdx
+            a.je("done")
+            a.label("fill")
+        a.raw("83 BB" + u32(BTL_GAUGES_OFF + 8) + "00")  # cmp dword [rbx+548h], 0
+        a.jle("done")
+        a.raw("C7 02" + u32(UPLIFT_MAX))  # mov dword [rdx], 100
+        a.raw("C7 83" + u32(BTL_GAUGE_CACHE) + u32(UPLIFT_MAX))
+        if chain:
+            a._rel("48 89 1D", MAGATSUHI_ACTOR)  # mov [actor], rbx
+            a._rel("48 89 15", MAGATSUHI_ARRAY)  # mov [array], rdx
+        a.label("done")
+        a.raw("48 83 C4 20 5B C3")
+        return a
+
+    if DEFER_SETNEXTSTEP:
+        DEFERRED_STEPS["magatsuhi"] = put_code(
+            data, caves, lambda a: hook(a, 0, chain, False)
+        )
+        return True
+
     # Chains onto whatever the thunk currently jumps to (the Battle Refill
     # or Stockpile cave when that patch is installed).
     for t in SETNEXTSTEP_THUNKS:
         prev = t + 5 + struct.unpack_from("<i", data, off(t) + 1)[0]
-
-        def hook(a, prev=prev, chain=chain):
-            a.raw("53 48 83 EC 20 48 89 CB")  # push rbx; sub rsp,20h; mov rbx,rcx
-            a.call(prev)
-            a.raw("0F B6 83" + u32(BTL_NEXTSTEP_OFF))  # movzx eax, byte [rbx+262h]
-            a.raw(
-                f"83 E8 {BTL_STEP_READY:02x} 83 F8 {BTL_STEP_START_EVENT - BTL_STEP_READY:02x}"
-            )
-            a.ja("done")  # opening steps only
-            a.raw("48 8B 93" + u32(BTL_GAUGES_OFF))  # mov rdx, [rbx+540h]
-            a.raw("48 85 D2").je("done")
-            if chain:
-                # A chain reuses the battle actor and its gauge array.
-                a._rel("48 39 1D", MAGATSUHI_ACTOR)  # cmp [actor], rbx
-                a.jne("fill")
-                a._rel("48 39 15", MAGATSUHI_ARRAY)  # cmp [array], rdx
-                a.je("done")
-                a.label("fill")
-            a.raw("83 BB" + u32(BTL_GAUGES_OFF + 8) + "00")  # cmp dword [rbx+548h], 0
-            a.jle("done")
-            a.raw("C7 02" + u32(UPLIFT_MAX))  # mov dword [rdx], 100
-            a.raw("C7 83" + u32(BTL_GAUGE_CACHE) + u32(UPLIFT_MAX))
-            if chain:
-                a._rel("48 89 1D", MAGATSUHI_ACTOR)  # mov [actor], rbx
-                a._rel("48 89 15", MAGATSUHI_ARRAY)  # mov [array], rdx
-            a.label("done")
-            a.raw("48 83 C4 20 5B C3")
-            return a
-
-        _jmp_site(data, t, put_code(data, caves, hook), 5)
+        _jmp_site(
+            data,
+            t,
+            put_code(data, caves, lambda a, prev=prev: hook(a, prev, chain, True)),
+            5,
+        )
     return True
 
 

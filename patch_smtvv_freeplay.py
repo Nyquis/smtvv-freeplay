@@ -104,7 +104,7 @@ from patch_manifest import LEGACY_MAP_PAK, MIRACLE_PAK
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.23.0"
+MOD_VERSION = "5.24.0"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -1403,6 +1403,9 @@ def main() -> None:
         data[:] = trial  # padding refilled with CC only
         del trial
 
+    gameplay_patches.DEFER_SETNEXTSTEP = True
+    gameplay_patches.DEFERRED_STEPS.clear()
+
     # ==================================================================
     # PATCH: Stockpile (exe + item list pak; reads the ItemTable carry limits)
     # ==================================================================
@@ -1524,6 +1527,29 @@ def main() -> None:
         except RuntimeError as exc:
             print(f"\n  WARNING: Autosave skipped - {exc}")
             fail("autosave")
+
+    if gameplay_patches.DEFERRED_STEPS:
+        main_cave = [
+            next_cave_off,
+            cave_end,
+            gameplay_patches.RDATA_VA - gameplay_patches.RDATA_RAW,
+        ]
+        try:
+            gameplay_patches.patch_setnextstep(
+                data, list(slack or []) + [main_cave]
+            )
+            next_cave_off = main_cave[0]
+            print("\n  Shared battle-step dispatcher")
+            print(
+                f"    Hooks         : {', '.join(gameplay_patches.DEFERRED_STEPS)}"
+            )
+        except RuntimeError as exc:
+            print(f"\n  WARNING: battle-step dispatcher did not fit - {exc}")
+            for key in gameplay_patches.DEFERRED_STEPS:
+                results[key] = False
+                fail(key)
+    gameplay_patches.DEFER_SETNEXTSTEP = False
+    gameplay_patches.DEFERRED_STEPS.clear()
 
     # ==================================================================
     # PATCH: Shop stock and prices (data pak only)
