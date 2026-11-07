@@ -104,7 +104,7 @@ from patch_manifest import LEGACY_MAP_PAK, MIRACLE_PAK
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.22.1"
+MOD_VERSION = "5.22.2"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -193,22 +193,20 @@ def file_to_va(foff: int) -> int:
 def _heal_code(party_cure_va: int, orig_tgt: int, dest_va: int) -> bytes:
     """Call PartyAllCure, then tail-jump to the original fount function.
 
-    Seven pushes keep RSP 16-byte aligned before the call, so no sub/add rsp
-    pair is needed. The callee-saved registers are restored first.
+    The 32-byte frame reserves the Windows x64 shadow space below the saved
+    registers; the callee's prologue spills live there.
     """
     code = bytearray()
     code += b"\x51"  # push rcx
     code += b"\x52"  # push rdx
     code += b"\x41\x50"  # push r8
     code += b"\x41\x51"  # push r9
-    code += b"\x57"  # push rdi
-    code += b"\x56"  # push rsi
     code += b"\x53"  # push rbx
+    code += b"\x48\x83\xec\x20"  # sub rsp, 20h (shadow space)
     code += b"\xe8"  # call PartyAllCure
     code += struct.pack("<i", party_cure_va - (dest_va + len(code) + 4))
+    code += b"\x48\x83\xc4\x20"  # add rsp, 20h
     code += b"\x5b"  # pop rbx
-    code += b"\x5e"  # pop rsi
-    code += b"\x5f"  # pop rdi
     code += b"\x41\x59"  # pop r9
     code += b"\x41\x58"  # pop r8
     code += b"\x5a"  # pop rdx
