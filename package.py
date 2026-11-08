@@ -37,6 +37,7 @@ INCLUDE_FILES = (
     "pe_imports.py",
     "signatures.py",
     "patch_essences.py",
+    "feature_patches.py",
     "gameplay_patches.py",
     "ue_asset.py",
     "autosave.py",

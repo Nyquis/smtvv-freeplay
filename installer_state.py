@@ -128,9 +128,9 @@ MODS = (
     ),
     Mod(
         "refresh",
-        "Party Refresh (experimental)",
-        "Restores the party's HP and MP at every battle step. This makes "
-        "battles effectively survivable and may trivialise the game.",
+        "Post-Battle Refresh (experimental)",
+        "Restores the party's HP and MP after every battle. This makes "
+        "attrition much less threatening and can trivialise the game.",
         "--refresh",
         "",
     ),

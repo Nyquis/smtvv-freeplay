@@ -89,6 +89,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import autosave
 import boot_pak
 import estoma
+import feature_patches
 import gameplay_patches
 import leylines
 import newborn
@@ -105,7 +106,7 @@ from patch_manifest import LEGACY_MAP_PAK, MIRACLE_PAK
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.28.0"
+MOD_VERSION = "5.29.0"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -851,7 +852,7 @@ def main() -> None:
     parser.add_argument(
         "--refresh",
         action="store_true",
-        help="Experimental: restore party HP/MP every battle step",
+        help="Experimental: restore party HP/MP after each battle",
     )
     parser.add_argument(
         "--no-shop",
@@ -1118,7 +1119,7 @@ def main() -> None:
             ("Stockpile", do_stockpile),
             ("Jump", do_jump),
             ("Magatsuhi", do_magatsuhi),
-            ("Party Refresh", do_refresh),
+            ("Post-Battle Refresh", do_refresh),
             ("Shop", do_shop),
             ("Intro", do_intro),
             ("Masakado", do_masakado),
@@ -1149,50 +1150,17 @@ def main() -> None:
     # PATCH: Reusable Essences
     # ==================================================================
     if do_essences:
-        actual = bytes(data[TRAMP_OFFSET : TRAMP_OFFSET + 5])
-        if actual != TRAMP_ORIG:
-            print(f"\n  ERROR: Essence AOB mismatch at 0x{TRAMP_OFFSET:08X}")
+        start = next_cave_off
+        try:
+            next_cave_off = feature_patches.patch_essences(
+                data, next_cave_off, cave_off, cave_len
+            )
+        except RuntimeError as exc:
+            print(f"\n  ERROR: {exc}")
             sys.exit(1)
-
-        orig_disp = struct.unpack_from("<i", data, TRAMP_OFFSET + 1)[0]
-        tramp_va = file_to_va(TRAMP_OFFSET)
-        orig_target = tramp_va + 5 + orig_disp
-        p_off = next_cave_off
-        p_va = file_to_va(p_off)
-
-        sc = bytearray()
-        sc += b"\x81\xf9"
-        sc += struct.pack("<I", ESSENCE_ID_MIN)  # cmp ecx, 311
-        sc += b"\x72"
-        jb_pos = len(sc)
-        sc += b"\x00"  # jb .pass
-        sc += b"\x81\xf9"
-        sc += struct.pack("<I", ESSENCE_ID_MAX)  # cmp ecx, 615
-        sc += b"\x77"
-        ja_pos = len(sc)
-        sc += b"\x00"  # ja .pass
-        sc += b"\xc3"  # ret (skip)
-        not_ess = len(sc)
-        sc[jb_pos] = not_ess - (jb_pos + 1)
-        sc[ja_pos] = not_ess - (ja_pos + 1)
-        sc += b"\xe9"  # jmp original
-        sc += struct.pack("<i", orig_target - (p_va + len(sc) + 4))
-
-        for i in range(len(sc)):
-            assert data[p_off + i] == 0xCC
-        next_cave_off = gameplay_patches._place(
-            data,
-            p_off,
-            cave_off + cave_len,
-            bytes(sc),
-            base_va=p_va,
-            check_refs=True,
-        )
-        struct.pack_into("<i", data, TRAMP_OFFSET + 1, p_va - (tramp_va + 5))
-
         patch_num += 1
         print(f"\n  [{patch_num}/{total}] Reusable Essences")
-        print(f"    Code cave     : 0x{p_off:08X}  ({len(sc)} bytes)")
+        print(f"    Code cave     : 0x{start:08X}  ({next_cave_off - start} bytes)")
         print(f"    Trampoline    : 0x{TRAMP_OFFSET:08X}  -> cave")
         ok("essences")
 
@@ -1200,51 +1168,36 @@ def main() -> None:
     # PATCH: Leyline Auto-Heal
     # ==================================================================
     if do_heal:
-        ry_actual = bytes(data[RYUKETSU_TRAMP_OFFSET : RYUKETSU_TRAMP_OFFSET + 5])
-        cure_va = (
-            _heal_cure_target(data)
-            if ry_actual == RYUKETSU_TRAMP_ORIG
-            else None
-        )
-        if ry_actual != RYUKETSU_TRAMP_ORIG:
-            print("\n  WARNING: Leyline AOB mismatch - skipping heal patch")
-            fail("heal")
-        elif cure_va is None:
-            print("\n  WARNING: PartyAllCure AOB mismatch - skipping heal patch")
+        start = next_cave_off
+        try:
+            result = feature_patches.patch_heal(
+                data, next_cave_off, cave_off, cave_len
+            )
+        except RuntimeError as exc:
+            print(f"\n  WARNING: {exc} - skipping heal patch")
             fail("heal")
         else:
-            ry_disp = struct.unpack_from("<i", data, RYUKETSU_TRAMP_OFFSET + 1)[0]
-            ry_tramp_va = file_to_va(RYUKETSU_TRAMP_OFFSET)
-            ry_orig_tgt = ry_tramp_va + 5 + ry_disp
-
-            h_off = next_cave_off
-            h_va = file_to_va(h_off)
-            hsc = _heal_code(cure_va, ry_orig_tgt, h_va)
-            next_cave_off = gameplay_patches._place(
-                data,
-                h_off,
-                cave_off + cave_len,
-                hsc,
-                base_va=h_va,
-                check_refs=True,
-            )
-            struct.pack_into(
-                "<i", data, RYUKETSU_TRAMP_OFFSET + 1, h_va - (ry_tramp_va + 5)
-            )
-
-            patch_num += 1
-            print(f"\n  [{patch_num}/{total}] Leyline Auto-Heal")
-            print(f"    Code cave     : 0x{h_off:08X}  ({len(hsc)} bytes)")
-            print(f"    Trampoline    : 0x{RYUKETSU_TRAMP_OFFSET:08X}  -> cave")
-            ok("heal")
+            if result is None:
+                print("\n  WARNING: Leyline AOB mismatch - skipping heal patch")
+                fail("heal")
+            else:
+                next_cave_off = result
+                patch_num += 1
+                print(f"\n  [{patch_num}/{total}] Leyline Auto-Heal")
+                print(
+                    f"    Code cave     : 0x{start:08X}  "
+                    f"({next_cave_off - start} bytes)"
+                )
+                print(
+                    f"    Trampoline    : 0x{RYUKETSU_TRAMP_OFFSET:08X}  -> cave"
+                )
+                ok("heal")
 
     # ==================================================================
     # PATCH: Miman Reveal
     # ==================================================================
     if do_mimans:
-        miman_offset = signatures.resolve(
-            data, MIMAN_POS_CHECK_OFFSET, MIMAN_POS_CHECK_ORIG
-        )
+        miman_offset = feature_patches.patch_miman(data)
         if miman_offset is None:
             print(
                 f"\n  WARNING: Miman AOB mismatch at "
@@ -1252,7 +1205,6 @@ def main() -> None:
             )
             fail("mimans")
         else:
-            data[miman_offset : miman_offset + 3] = b"\xb0\x01\xc3"
             patch_num += 1
             print(f"\n  [{patch_num}/{total}] Miman Reveal")
             print(f"    Position check: 0x{miman_offset:08X}  -> true")
@@ -1283,100 +1235,21 @@ def main() -> None:
     # PATCH: NG+ Miracles Unlock
     # ==================================================================
     if do_miracles:
-        miracles_ok = True
-
-        # 1. NOP the hardcoded "cmp ecx, 666; je BLOCK"
-        expected_je = bytes([0x0F, 0x84])
-        if data[MIRACLE_666_NOP_ADDR : MIRACLE_666_NOP_ADDR + 2] == expected_je:
-            for i in range(6):
-                data[MIRACLE_666_NOP_ADDR + i] = 0x90
+        try:
+            result = feature_patches.patch_miracles(
+                data, next_cave_off, cave_off, cave_len
+            )
+        except RuntimeError as exc:
+            print(f"\n  WARNING: {exc} - skipping executable miracle hooks")
+            miracles_ok = False
         else:
-            print("\n  WARNING: 666-block AOB mismatch — skipping NOP")
-            miracles_ok = False
-
-        # 2. Hook IsAddedSelectableGodParameterSkill -> true for NG+ IDs
-        ma_actual = bytes(data[MIRACLE_ADDED_TRAMP : MIRACLE_ADDED_TRAMP + 5])
-        ms_actual = bytes(data[MIRACLE_STATE_TRAMP : MIRACLE_STATE_TRAMP + 5])
-
-        if ma_actual != MIRACLE_ADDED_ORIG:
-            print("\n  WARNING: IsAdded AOB mismatch")
-            miracles_ok = False
-        if ms_actual != MIRACLE_STATE_ORIG:
-            print("\n  WARNING: GetState AOB mismatch")
-            miracles_ok = False
-
-        if miracles_ok:
-            # Hook IsAddedSelectable
-            ma_disp = struct.unpack_from("<i", data, MIRACLE_ADDED_TRAMP + 1)[0]
-            ma_va = file_to_va(MIRACLE_ADDED_TRAMP)
-            ma_tgt = ma_va + 5 + ma_disp
-
-            mc1 = next_cave_off
-            mc1_va = file_to_va(mc1)
-            sc_a = bytearray()
-            je_a = []
-            for mid in MIRACLE_UNLOCK_IDS:
-                sc_a += b"\x83\xf9" + bytes([mid]) + b"\x74"
-                je_a.append(len(sc_a))
-                sc_a += b"\x00"
-            sc_a += b"\xe9"
-            sc_a += struct.pack("<i", ma_tgt - (mc1_va + len(sc_a) + 4))
-            yes_a = len(sc_a)
-            for jp in je_a:
-                sc_a[jp] = yes_a - (jp + 1)
-            sc_a += b"\xb0\x01\xc3"
-
-            next_cave_off = gameplay_patches._place(
-                data,
-                mc1,
-                cave_off + cave_len,
-                bytes(sc_a),
-                base_va=mc1_va,
-                check_refs=True,
-            )
-            data[MIRACLE_ADDED_TRAMP] = 0xE9
-            struct.pack_into(
-                "<i", data, MIRACLE_ADDED_TRAMP + 1, mc1_va - (ma_va + 5)
-            )
-
-            # Hook GetGodParameterSkillState -> return 4 (purchasable)
-            ms_disp = struct.unpack_from("<i", data, MIRACLE_STATE_TRAMP + 1)[0]
-            ms_va = file_to_va(MIRACLE_STATE_TRAMP)
-            ms_tgt = ms_va + 5 + ms_disp
-
-            mc2 = next_cave_off
-            mc2_va = file_to_va(mc2)
-            sc_s = bytearray()
-            je_s = []
-            for mid in MIRACLE_UNLOCK_IDS:
-                sc_s += b"\x83\xf9" + bytes([mid]) + b"\x74"
-                je_s.append(len(sc_s))
-                sc_s += b"\x00"
-            sc_s += b"\xe9"
-            sc_s += struct.pack("<i", ms_tgt - (mc2_va + len(sc_s) + 4))
-            yes_s = len(sc_s)
-            for jp in je_s:
-                sc_s[jp] = yes_s - (jp + 1)
-            sc_s += b"\xb0\x04\xc3"
-
-            next_cave_off = gameplay_patches._place(
-                data,
-                mc2,
-                cave_off + cave_len,
-                bytes(sc_s),
-                base_va=mc2_va,
-                check_refs=True,
-            )
-            data[MIRACLE_STATE_TRAMP] = 0xE9
-            struct.pack_into(
-                "<i", data, MIRACLE_STATE_TRAMP + 1, mc2_va - (ms_va + 5)
-            )
-
+            next_cave_off, mc1, size_a, mc2, size_s = result
+            miracles_ok = True
             patch_num += 1
             print(f"\n  [{patch_num}/{total}] NG+ Miracles Unlock")
             print(
-                f"    Code caves    : 0x{mc1:08X} ({len(sc_a)}B)"
-                f" + 0x{mc2:08X} ({len(sc_s)}B)"
+                f"    Code caves    : 0x{mc1:08X} ({size_a}B)"
+                f" + 0x{mc2:08X} ({size_s}B)"
             )
             print(f"    NOP 666-block : 0x{MIRACLE_666_NOP_ADDR:08X}")
 
@@ -1405,7 +1278,7 @@ def main() -> None:
     # PATCH: Free Compendium
     # ==================================================================
     if do_compendium:
-        compendium_offset = signatures.resolve(data, DEVIL_COST_OFFSET, DEVIL_COST_ORIG)
+        compendium_offset = feature_patches.patch_compendium(data)
         if compendium_offset is None:
             print(
                 f"\n  WARNING: Compendium AOB mismatch at "
@@ -1413,7 +1286,6 @@ def main() -> None:
             )
             fail("compendium")
         else:
-            data[compendium_offset : compendium_offset + 3] = b"\x33\xc0\xc3"
             patch_num += 1
             print(f"\n  [{patch_num}/{total}] Free Compendium")
             print(f"    Cost formula  : 0x{compendium_offset:08X}  -> 0")
@@ -1449,8 +1321,8 @@ def main() -> None:
             else:
                 gameplay_patches.DEFERRED_STEPS["refresh"] = step_va
                 patch_num += 1
-                print(f"\n  [{patch_num}/{total}] Party Refresh")
-                print("    HP/MP         : restored every battle step")
+                print(f"\n  [{patch_num}/{total}] Post-Battle Refresh")
+                print("    HP/MP         : restored after each battle")
                 ok("refresh")
 
     # ==================================================================

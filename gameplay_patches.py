@@ -473,13 +473,13 @@ def patch_magatsuhi(
 def patch_party_refresh(
     data: bytearray, caves: list[list[int]], party_cure_va: int
 ) -> int:
-    """Build and place the refresh step body; return its entry VA."""
+    """Build and place the post-battle refresh body; return its entry VA."""
 
     def build(a):
         a.raw("53 48 83 EC 20 48 89 CB")  # push rbx; sub rsp,20h; mov rbx,rcx
         a.raw("0F B6 83" + struct.pack("<I", BTL_NEXTSTEP_OFF).hex())
         a.raw("83 F8 %02x" % BTL_STEP_FINISH_WAIT)
-        a.ja("done")
+        a.jne("done")
         a.call(party_cure_va)
         a.label("done")
         a.raw("48 83 C4 20 5B C3")

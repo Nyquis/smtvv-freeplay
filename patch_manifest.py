@@ -229,7 +229,7 @@ FEATURES = (
     ),
     Feature(
         "refresh",
-        "Party Refresh",
+        "Post-Battle Refresh",
         ("--refresh",),
         "gameplay_patches.patch_party_refresh",
         _refresh_sites,

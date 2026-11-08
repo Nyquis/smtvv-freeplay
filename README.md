@@ -12,7 +12,7 @@ Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
 > commitment. Back up your saves and use it at your own risk. This project is
 > not affiliated with ATLUS or SEGA.
 
-**Current version: 5.28.0**
+**Current version: 5.29.0**
 
 ## Features
 
@@ -73,9 +73,9 @@ Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
     install time (1-20). That slot is overwritten after each battle, so pick
     one you don't use for anything else.
 
-14. **Party Refresh (experimental)** - restores the party's HP and MP on
-    every battle step. This makes the party very hard to kill and can
-    trivialise battles; it is off by default.
+14. **Post-Battle Refresh (experimental)** - restores the party's HP and MP
+    after every battle. This makes attrition much less threatening and can
+    trivialise the game; it is off by default.
 
 15. **DualSense Haptics** (Windows only) - haptic effects on a DualSense
     controller for battle hits by element, criticals, blocks and misses,
