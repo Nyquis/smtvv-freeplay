@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import struct
 
-import gameplay_patches
+import code_caves
 import signatures
 
 
@@ -49,7 +49,7 @@ def patch_essences(
     sc += b"\xe9"
     sc += struct.pack("<i", orig_target - (p_va + len(sc) + 4))
 
-    next_cave_off = gameplay_patches._place(
+    next_cave_off = code_caves._place(
         data,
         p_off,
         cave_off + cave_len,
@@ -81,7 +81,7 @@ def patch_heal(
     h_off = next_cave_off
     h_va = p.file_to_va(h_off)
     hsc = p._heal_code(cure_va, ry_orig_tgt, h_va)
-    next_cave_off = gameplay_patches._place(
+    next_cave_off = code_caves._place(
         data,
         h_off,
         cave_off + cave_len,
@@ -142,7 +142,7 @@ def patch_miracles(
         sc_a[jp] = yes_a - (jp + 1)
     sc_a += b"\xb0\x01\xc3"
 
-    next_cave_off = gameplay_patches._place(
+    next_cave_off = code_caves._place(
         data,
         mc1,
         cave_off + cave_len,
@@ -172,7 +172,7 @@ def patch_miracles(
         sc_s[jp] = yes_s - (jp + 1)
     sc_s += b"\xb0\x04\xc3"
 
-    next_cave_off = gameplay_patches._place(
+    next_cave_off = code_caves._place(
         data,
         mc2,
         cave_off + cave_len,

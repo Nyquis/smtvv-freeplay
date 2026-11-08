@@ -5,11 +5,12 @@
 
 from __future__ import annotations
 
+import code_caves
 import gameplay_patches as gp
 
 
 def test_put_code_uses_the_tightest_cave(monkeypatch):
-    monkeypatch.setattr(gp, "_range_has_reference", lambda *_args: False)
+    monkeypatch.setattr(code_caves, "_range_has_reference", lambda *_args: False)
     data = bytearray(b"\xcc" * 0x200)
     caves = [
         [0x00, 0x80, 0],  # large: 112 bytes remain after a 16-byte hook
@@ -26,7 +27,7 @@ def test_put_code_uses_the_tightest_cave(monkeypatch):
 
 def test_put_code_skips_referenced_slots(monkeypatch):
     monkeypatch.setattr(
-        gp,
+        code_caves,
         "_range_has_reference",
         lambda va, length: va in (0x00, 0x10),
     )

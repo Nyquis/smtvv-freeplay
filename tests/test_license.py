@@ -14,6 +14,7 @@ NEW_FILES = (
     "installer_platform.py",
     "installer_state.py",
     "installer_ui.py",
+    "code_caves.py",
     "patch_manifest.py",
     "signatures.py",
     "leylines.py",

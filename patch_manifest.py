@@ -17,6 +17,7 @@ from dataclasses import dataclass
 
 import autosave
 import boot_pak
+import code_caves
 import estoma
 import gameplay_patches as gp
 import leylines
@@ -47,13 +48,13 @@ def _resolved_off(data, offset: int, original: bytes) -> list[tuple[int, int]]:
 
 
 def _resolved_va(data, address: int, original: bytes) -> list[tuple[int, int]]:
-    offset = gp.off(address)
+    offset = code_caves.off(address)
     resolved = signatures.resolve(data, offset, original)
     return [(resolved if resolved is not None else offset, len(original))]
 
 
 def _nextstep_sites() -> list[tuple[int, int]]:
-    return [(gp.off(thunk), 5) for thunk in gp.SETNEXTSTEP_THUNKS]
+    return [(code_caves.off(thunk), 5) for thunk in gp.SETNEXTSTEP_THUNKS]
 
 
 def _essences_sites(data) -> list[tuple[int, int]]:
@@ -99,7 +100,7 @@ def _stockpile_sites(data) -> list[tuple[int, int]]:
         + _resolved_va(data, gp.ITEM_GET_MAX, gp.ITEM_GET_MAX_ORIG)
         + _resolved_va(data, gp.ITEM_GET_NUM, gp.ITEM_GET_NUM_ORIG)
         + [
-            (gp.off(thunk), len(stockpile.MAX_THUNK_ORIG))
+            (code_caves.off(thunk), len(stockpile.MAX_THUNK_ORIG))
             for thunk in stockpile.MAX_THUNKS
         ]
     )
@@ -132,13 +133,13 @@ def _intro_sites(data) -> list[tuple[int, int]]:
 
 
 def _newborn_sites(data) -> list[tuple[int, int]]:
-    return [(gp.off(newborn.RENEWAL_JMP), 5)]
+    return [(code_caves.off(newborn.RENEWAL_JMP), 5)]
 
 
 def _autosave_sites(data) -> list[tuple[int, int]]:
     return _nextstep_sites() + [
-        (gp.off(autosave.FIELD_TICK_SITE), 5),
-        (gp.off(autosave.SAVE_BUILD_SITE), 5),
+        (code_caves.off(autosave.FIELD_TICK_SITE), 5),
+        (code_caves.off(autosave.SAVE_BUILD_SITE), 5),
     ]
 
 
@@ -384,11 +385,11 @@ def _relocate_off(data, module, name: str, original: bytes, label: str, notes):
 def _relocate_va(data, module, name: str, original: bytes, label: str, notes):
     """Resolve a VA site and write the new VA back to the module."""
     known = getattr(module, name)
-    resolved = signatures.resolve(data, gp.off(known), original)
+    resolved = signatures.resolve(data, code_caves.off(known), original)
     if resolved is None:
         notes.append(f"{label}: signature not unique or missing")
         return False
-    setattr(module, name, gp.va(resolved))
+    setattr(module, name, code_caves.va(resolved))
     return True
 
 
@@ -398,13 +399,13 @@ def _relocate_va_list(data, module, name: str, original: bytes, label: str, note
     moved = []
     ok = True
     for known in entries:
-        resolved = signatures.resolve(data, gp.off(known), original)
+        resolved = signatures.resolve(data, code_caves.off(known), original)
         if resolved is None:
             notes.append(f"{label}: signature not unique or missing")
             moved.append(known)
             ok = False
         else:
-            moved.append(gp.va(resolved))
+            moved.append(code_caves.va(resolved))
     entries[:] = moved
     return ok
 
@@ -413,7 +414,7 @@ def _derive_target(data, module, site_name: str, target_name: str) -> None:
     """Point a call/jump target at the address the resolved site now reaches."""
     site = getattr(module, site_name)
     disp = int.from_bytes(
-        bytes(data[gp.off(site) + 1 : gp.off(site) + 5]), "little", signed=True
+        bytes(data[code_caves.off(site) + 1 : code_caves.off(site) + 5]), "little", signed=True
     )
     setattr(module, target_name, site + 5 + disp)
 

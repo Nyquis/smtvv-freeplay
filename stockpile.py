@@ -30,6 +30,7 @@ import os
 import struct
 
 import gameplay_patches
+from code_caves import Asm, _jmp_site, _place, off, va
 from gameplay_patches import (
     BTL_NEXTSTEP_OFF,
     BTL_STEP_END_EVENT,
@@ -40,11 +41,6 @@ from gameplay_patches import (
     ITEM_GET_NUM_ORIG,
     SETNEXTSTEP_ORIG,
     SETNEXTSTEP_THUNKS,
-    Asm,
-    _jmp_site,
-    _place,
-    off,
-    va,
 )
 from shop_pak import ITEM_ID_OFF, ITEM_ROW, ITEM_TABLE, _section
 

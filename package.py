@@ -39,6 +39,7 @@ INCLUDE_FILES = (
     "patch_essences.py",
     "feature_patches.py",
     "gameplay_patches.py",
+    "code_caves.py",
     "ue_asset.py",
     "autosave.py",
     "boot_pak.py",

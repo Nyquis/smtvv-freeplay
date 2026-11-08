@@ -24,7 +24,7 @@ import os
 import struct
 
 import ue_asset
-from gameplay_patches import Asm, _jmp_site, _place, off, va
+from code_caves import Asm, _jmp_site, _place, off, va
 
 NEWBORN_PAK = "pakchunk94_FreeplayNewborn_P.pak"
 NEWBORN_SOURCE_PAK = "pakchunk0-WindowsNoEditor.pak"

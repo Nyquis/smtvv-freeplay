@@ -27,6 +27,7 @@ def test_release_zip_contains_shipping_files_only(tmp_path):
         "SMTVV Freeplay/patch_smtvv_freeplay.py",
         "SMTVV Freeplay/pe_imports.py",
         "SMTVV Freeplay/feature_patches.py",
+        "SMTVV Freeplay/code_caves.py",
         "SMTVV Freeplay/leylines.py",
         "SMTVV Freeplay/reveal.py",
         "SMTVV Freeplay/README.md",

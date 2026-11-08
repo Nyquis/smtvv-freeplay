@@ -14,13 +14,8 @@ import struct
 
 import gameplay_patches
 import signatures
-from gameplay_patches import (
-    BTL_NEXTSTEP_OFF,
-    SETNEXTSTEP_THUNKS,
-    _jmp_site,
-    off,
-    put_code,
-)
+from code_caves import _jmp_site, off, put_code
+from gameplay_patches import BTL_NEXTSTEP_OFF, SETNEXTSTEP_THUNKS
 
 SAVE_SLOT_NATIVE = 0x140B70210   # Save(list index) -> bool; 0..19 = save slots 1..20
 SAVE_SLOT_ORIG   = bytes.fromhex("4056 4881ec00020000 4863f1".replace(" ", ""))

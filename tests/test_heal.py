@@ -40,10 +40,10 @@ def test_heal_code_does_not_put_saved_registers_in_shadow_space():
 
 
 def test_heal_cure_target_resolves_and_reports_missing(monkeypatch):
-    import gameplay_patches as gp
+    import code_caves
 
-    monkeypatch.setattr(gp, "off", lambda value: value)
-    monkeypatch.setattr(gp, "va", lambda value: value)
+    monkeypatch.setattr(code_caves, "off", lambda value: value)
+    monkeypatch.setattr(code_caves, "va", lambda value: value)
 
     data = bytearray(0x1000)
     data[0x300 : 0x300 + len(patcher.PARTY_ALL_CURE_ORIG)] = patcher.PARTY_ALL_CURE_ORIG

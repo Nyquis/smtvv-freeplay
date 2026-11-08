@@ -17,7 +17,7 @@ from __future__ import annotations
 import struct
 
 import signatures
-from gameplay_patches import Asm, _jmp_site, _place, off, va
+from code_caves import Asm, _jmp_site, _place, off, va
 
 # UMinimapManager icon renderer, POIType test:
 #   movzx ecx, byte ptr [rbx]      ; m_Param.m_POIType

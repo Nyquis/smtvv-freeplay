@@ -88,6 +88,7 @@ import zlib
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import autosave
 import boot_pak
+import code_caves
 import estoma
 import feature_patches
 import gameplay_patches
@@ -100,13 +101,14 @@ import reveal
 import shop_pak
 import signatures
 import stockpile
+from code_caves import IMAGE_BASE, RDATA_RAW, RDATA_VA
 from patch_manifest import LEGACY_MAP_PAK, MIRACLE_PAK
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.29.0"
+MOD_VERSION = "5.30.0"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -125,11 +127,6 @@ GP_TABLE_ENTRY = (
 # Essence item-ID range (inclusive)
 ESSENCE_ID_MIN = 311  # 0x137
 ESSENCE_ID_MAX = 615  # 0x267
-
-# PE section layout (for VA <-> file-offset conversion in .rdata)
-IMAGE_BASE = 0x140000000
-RDATA_RAW = 0x600
-RDATA_VA = 0x140001000
 
 # ItemErase implementation trampoline
 # This 5-byte JMP (E9 xx xx xx xx) is the single bottleneck through which
@@ -189,7 +186,7 @@ DEVIL_COST_ORIG = bytes.fromhex("4c8bdc49894b0841574881ecc0000000")
 
 
 def file_to_va(foff: int) -> int:
-    return gameplay_patches.va(foff)
+    return code_caves.va(foff)
 
 
 def _heal_code(party_cure_va: int, orig_tgt: int, dest_va: int) -> bytes:
@@ -221,7 +218,7 @@ def _heal_code(party_cure_va: int, orig_tgt: int, dest_va: int) -> bytes:
 def _heal_cure_target(data: bytearray) -> int | None:
     """VA of PartyAllCure for this build, or None when its prologue is missing."""
     site = signatures.resolve(
-        data, gameplay_patches.off(PARTY_ALL_CURE_VA), PARTY_ALL_CURE_ORIG
+        data, code_caves.off(PARTY_ALL_CURE_VA), PARTY_ALL_CURE_ORIG
     )
     return None if site is None else file_to_va(site)
 
@@ -725,7 +722,7 @@ def _patched_markers() -> tuple[tuple[int, bytes], ...]:
     return (
         (MIMAN_POS_CHECK_OFFSET, b"\xb0\x01\xc3"),
         (DEVIL_COST_OFFSET, b"\x33\xc0\xc3"),
-        (gameplay_patches.off(leylines.POI_VISIBLE_SITE), b"\xe9"),
+        (code_caves.off(leylines.POI_VISIBLE_SITE), b"\xe9"),
     )
 
 
@@ -1051,7 +1048,7 @@ def main() -> None:
     print(f"  Reading {os.path.basename(source)} ...")
     with open(source, "rb") as fh:
         data = bytearray(fh.read())
-    gameplay_patches.set_image_layout(data)
+    code_caves.set_image_layout(data)
     gameplay_patches.set_iat_slots(pe_imports.import_slots(data))
     relocation_notes = patch_manifest.relocate(data)
     if relocation_notes:
@@ -1077,7 +1074,7 @@ def main() -> None:
         print("\n  ERROR: no suitable CC cave found in .rdata.")
         sys.exit(1)
     cave_off, cave_len = cave
-    gameplay_patches.set_cave_references(LAST_REFERENCES)
+    code_caves.set_cave_references(LAST_REFERENCES)
     info = LAST_CAVE_INFO
     if info is not None:
         print(
@@ -1093,7 +1090,7 @@ def main() -> None:
             print("  WARNING: cave safety checks did not all pass")
     for label, addr, size in _scratch_regions():
         _assert_writable(data, addr, label)
-        offset = gameplay_patches.off(addr)
+        offset = code_caves.off(addr)
         data[offset : offset + size] = b"\0" * size
     if autosave_slot is not None:
         for label, addr in (
@@ -1298,7 +1295,7 @@ def main() -> None:
     slack = None
     if do_stockpile or do_magatsuhi or do_refresh or autosave_slot is not None:
         trial = bytearray(data)
-        slack = gameplay_patches.slack_caves(trial)
+        slack = code_caves.slack_caves(trial)
         data[:] = trial  # padding refilled with CC only
         del trial
 
@@ -1451,7 +1448,7 @@ def main() -> None:
         main_cave = [
             next_cave_off,
             cave_end,
-            gameplay_patches.RDATA_VA - gameplay_patches.RDATA_RAW,
+            RDATA_VA - RDATA_RAW,
         ]
         try:
             gameplay_patches.patch_setnextstep(
@@ -1527,7 +1524,7 @@ def main() -> None:
         main_cave = [
             next_cave_off,
             cave_end,
-            gameplay_patches.RDATA_VA - gameplay_patches.RDATA_RAW,
+            RDATA_VA - RDATA_RAW,
         ]
         dest = gameplay_patches.patch_refocus(data, list(slack or []) + [main_cave])
         if dest is None:

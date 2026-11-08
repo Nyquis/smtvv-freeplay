@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import struct
 
+import code_caves
 import gameplay_patches as gp
 
 SITE = 0x100
@@ -29,9 +30,12 @@ def test_dispatcher_calls_original_then_each_step(monkeypatch):
     thunk = bytes.fromhex("e94b000000")  # jmp ORIG_TARGET from SITE
     monkeypatch.setattr(gp, "SETNEXTSTEP_THUNKS", [SITE])
     monkeypatch.setattr(gp, "SETNEXTSTEP_ORIG", thunk)
-    monkeypatch.setattr(gp, "CAVE_REFS", [])
+    monkeypatch.setattr(code_caves, "CAVE_REFS", [])
+    # gameplay_patches imports off/va by value; _jmp_site lives in code_caves.
     monkeypatch.setattr(gp, "off", lambda value: value)
     monkeypatch.setattr(gp, "va", lambda value: value)
+    monkeypatch.setattr(code_caves, "off", lambda value: value)
+    monkeypatch.setattr(code_caves, "va", lambda value: value)
     monkeypatch.setattr(
         gp,
         "DEFERRED_STEPS",

@@ -14,13 +14,14 @@ import patch_manifest
 def synthetic_layout(monkeypatch):
     """Treat VA and file offset as the same value, and restore relocated globals."""
     import autosave
+    import code_caves
     import gameplay_patches as gp
     import newborn
     import patch_smtvv_freeplay as patcher
     import stockpile
 
-    monkeypatch.setattr(gp, "off", lambda value: value)
-    monkeypatch.setattr(gp, "va", lambda value: value)
+    monkeypatch.setattr(code_caves, "off", lambda value: value)
+    monkeypatch.setattr(code_caves, "va", lambda value: value)
     for module, names in (
         (
             patcher,
