@@ -23,6 +23,10 @@ venv/
 *.original
 *.pak
 
+# Installer crash logs (portable install, never committed)
+logs/
+*.log
+
 # Build output
 dist/
 build/

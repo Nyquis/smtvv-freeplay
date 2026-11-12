@@ -36,7 +36,9 @@ again.
    After the review, a preflight check runs with a progress bar and a summary;
    when it passes, installation starts automatically and each stage is tracked.
    Press `d` on the Done card (or a failure) to read the full patcher log; the
-   interface also follows the terminal size if you resize the window.
+   interface also follows the terminal size if you resize the window. If an
+   install fails, a crash log is written to `logs/freeplay-installer.log` next
+   to the installer, or to the system temp folder if that is not writable.
    Run `install.bat` again later to add or remove mods; installed mods are
    pre-selected and the first screen offers to restore the original files.
 5. If it can't find the game automatically, paste your SMT5V folder path when

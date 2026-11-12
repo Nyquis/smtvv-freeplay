@@ -8,6 +8,7 @@ from __future__ import annotations
 import io
 import queue
 import sys
+from pathlib import Path
 
 import installer as entry
 import installer_state as state
@@ -391,12 +392,89 @@ def test_interactive_wrapper_does_not_wait_when_redirected(monkeypatch, tmp_path
 
 def test_failure_log_is_written(monkeypatch, tmp_path):
     console = _console(monkeypatch)
+    log_dir = tmp_path / "logs"
+    monkeypatch.setattr(entry, "LOG_DIR", log_dir)
     monkeypatch.setattr(entry, "LAST_LOG", ["line one", "line two"])
-    monkeypatch.setattr(entry.tempfile, "gettempdir", lambda: str(tmp_path))
-    console.write = lambda *_args: None
+    monkeypatch.setattr(entry, "LAST_ERROR", ["something failed"])
+    monkeypatch.setattr(entry, "LAST_CONTEXT", ["Mode: interactive"])
     monkeypatch.setattr(entry.ui, "wait_for_enter", lambda *_args: None)
     monkeypatch.setattr(entry, "_interactive_flow", lambda *_args: 1)
     assert entry.run_interactive(None, console) == 1
-    log = tmp_path / "freeplay-installer.log"
-    assert log.is_file()
-    assert "line two" in log.read_text(encoding="utf-8")
+    log = log_dir / "freeplay-installer.log"
+    text = log.read_text(encoding="utf-8")
+    assert "SMT5V Freeplay Installer" in text
+    assert "Version:" in text
+    assert "something failed" in text
+    assert "line two" in text
+
+
+def test_success_does_not_write_a_log(monkeypatch, tmp_path):
+    console = _console(monkeypatch)
+    log_dir = tmp_path / "logs"
+    monkeypatch.setattr(entry, "LOG_DIR", log_dir)
+    monkeypatch.setattr(entry.ui, "wait_for_enter", lambda *_args: None)
+    monkeypatch.setattr(entry, "_interactive_flow", lambda *_args: 0)
+    assert entry.run_interactive(None, console) == 0
+    assert not log_dir.exists()
+
+
+def test_log_falls_back_when_local_dir_is_not_writable(monkeypatch, tmp_path):
+    console = _console(monkeypatch)
+    blocked = tmp_path / "blocked"
+    blocked.write_text("not a directory", encoding="utf-8")
+    fallback = tmp_path / "temp"
+    monkeypatch.setattr(entry, "LOG_DIR", blocked)
+    monkeypatch.setattr(entry.tempfile, "gettempdir", lambda: str(fallback))
+    monkeypatch.setattr(entry, "LAST_ERROR", ["write failed"])
+    path = entry._write_log(console, 1)
+    assert path == fallback / "freeplay-installer.log"
+    assert "write failed" in path.read_text(encoding="utf-8")
+
+
+def test_log_redacts_home_and_temp_paths(monkeypatch, tmp_path):
+    console = _console(monkeypatch)
+    log_dir = tmp_path / "logs"
+    monkeypatch.setattr(entry, "LOG_DIR", log_dir)
+    monkeypatch.setattr(
+        entry,
+        "LAST_LOG",
+        [str(Path.home()), entry.tempfile.gettempdir()],
+    )
+    path = entry._write_log(console, 1)
+    text = path.read_text(encoding="utf-8")
+    assert str(Path.home()) not in text
+    assert entry.tempfile.gettempdir() not in text
+    assert "%USERPROFILE%" in text or "~" in text
+
+
+def test_scripted_failure_writes_a_log(monkeypatch, tmp_path):
+    console = _console(monkeypatch)
+    log_dir = tmp_path / "logs"
+    monkeypatch.setattr(entry, "LOG_DIR", log_dir)
+    monkeypatch.setattr(
+        entry.platform, "find_game", lambda *_args: _fake_game(tmp_path)
+    )
+
+    def fail(*_args):
+        entry.LAST_ERROR[:] = ["patch failed"]
+        return False
+
+    monkeypatch.setattr(entry, "run_patcher_steps", fail)
+    assert entry.run_scripted(None, [], console) == 1
+    text = (log_dir / "freeplay-installer.log").read_text(encoding="utf-8")
+    assert "patch failed" in text
+
+
+def test_unexpected_exception_writes_a_traceback(monkeypatch, tmp_path):
+    _console(monkeypatch)
+    log_dir = tmp_path / "logs"
+    monkeypatch.setattr(entry, "LOG_DIR", log_dir)
+
+    def crash(*_args):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(entry, "run_scripted", crash)
+    assert entry.main(["--uninstall"]) == 1
+    text = (log_dir / "freeplay-installer.log").read_text(encoding="utf-8")
+    assert "--- Traceback ---" in text
+    assert "RuntimeError: boom" in text

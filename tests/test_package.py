@@ -53,6 +53,7 @@ def test_release_zip_contains_shipping_files_only(tmp_path):
         assert excluded not in names
     assert not any(name.startswith("SMTVV Freeplay/tests/") for name in names)
     assert not any(name.startswith("SMTVV Freeplay/.github/") for name in names)
+    assert not any(name.endswith(".log") or "/logs/" in name for name in names)
 
 
 def test_shell_scripts_keep_the_executable_bit(tmp_path):

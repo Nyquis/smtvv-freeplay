@@ -12,7 +12,7 @@ Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
 > commitment. Back up your saves and use it at your own risk. This project is
 > not affiliated with ATLUS or SEGA.
 
-**Current version: 5.30.0**
+**Current version: 5.31.0**
 
 ## Features
 
@@ -132,8 +132,10 @@ See **[INSTALL.md](INSTALL.md)** for the full step-by-step. Quick version below.
    (source, cave, data tables and selected patches). When it passes, the
    installer continues automatically; failures wait so you can read them. The
    install screen tracks each stage and ends with a Done card. Press `d` on the
-   Done card (or a failure) to read the full patcher log. The interface follows
-   the window if you resize it.
+   Done card (or a failure) to read the full patcher log. If an install fails,
+   a crash log is written to `logs/freeplay-installer.log` next to the
+   installer, or to the system temp folder if that location is not writable.
+   The interface follows the window if you resize it.
 
    Run `install.bat` again later to add or remove mods: installed mods are
    pre-selected, and the first screen offers to uninstall everything.

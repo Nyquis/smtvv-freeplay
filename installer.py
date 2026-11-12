@@ -11,9 +11,12 @@ from __future__ import annotations
 
 import os
 import queue
+import re
 import sys
 import tempfile
+import traceback
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -24,7 +27,12 @@ import installer_ui as ui
 HERE = Path(__file__).resolve().parent
 PATCH_SCRIPT = HERE / "patch_smtvv_freeplay.py"
 HAPTICS_SOURCE = HERE / "haptics"
+LOG_DIR = HERE / "logs"
+LOG_NAME = "freeplay-installer.log"
 LAST_LOG: list[str] = []
+LAST_ERROR: list[str] = []
+LAST_CONTEXT: list[str] = []
+_ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 FLAGS_WITH_VALUE = (
     "--shop-consumables",
     "--shop-growth",
@@ -138,6 +146,7 @@ def run_patcher_steps(game: Path, flags: list[str], console: ui.Console) -> bool
         console.write("")
         console.write(console.red("  Patch verification failed. Nothing was written."))
         LAST_LOG[:] = (result.stdout or "").splitlines()
+        LAST_ERROR[:] = ["Patch verification failed. Nothing was written."]
         return False
     console.write(console.green("  All selected patches verified."))
 
@@ -146,6 +155,8 @@ def run_patcher_steps(game: Path, flags: list[str], console: ui.Console) -> bool
     if result.returncode != 0:
         console.write("")
         console.write(console.red("  Patcher failed. See the messages above."))
+        LAST_LOG[:] = (result.stdout or "").splitlines()
+        LAST_ERROR[:] = ["Patcher failed while applying patches."]
         return False
     return True
 
@@ -169,9 +180,12 @@ def finish_install(
 
 
 def run_scripted(game_arg: str | None, flags: list[str], console: ui.Console) -> int:
+    LAST_LOG.clear()
+    LAST_ERROR.clear()
     game = platform.find_game(game_arg, HERE)
     if game is None:
         console.write(console.red("Could not find SMT5V. Pass --game-dir <folder>."))
+        _write_failure_log(console, 1, ["SMT5V folder not found."])
         return 1
     if flags == ["--uninstall"]:
         return run_uninstall(game, console)
@@ -179,7 +193,9 @@ def run_scripted(game_arg: str | None, flags: list[str], console: ui.Console) ->
     features = state.read_features(bindir / state.FEATURES)
     banner(console, state.mod_version(PATCH_SCRIPT))
     status_line(console, game, state.selection_from(features))
+    _remember_flags(flags)
     if not run_patcher_steps(game, flags, console):
+        _write_failure_log(console, 1)
         return 1
     selection = state.selection_from(state.read_features(bindir / state.FEATURES))
     finish_install(
@@ -734,6 +750,7 @@ def _await_card(
 
 
 def _run_preflight(w: Wizard, flags: list[str]) -> tuple[bool, state.PatchRun]:
+    _remember_flags(flags)
     run = state.PatchRun()
     if not w.console.tty:
         result = platform.run_patcher(PATCH_SCRIPT, w.game, flags, check=True)
@@ -747,6 +764,8 @@ def _run_preflight(w: Wizard, flags: list[str]) -> tuple[bool, state.PatchRun]:
             w.console.write(
                 w.console.red("  Patch verification failed. Nothing was written.")
             )
+            LAST_LOG[:] = (result.stdout or "").splitlines()
+            LAST_ERROR[:] = ["Patch verification failed. Nothing was written."]
         for warning in run.warnings:
             w.console.write(w.console.yellow("  WARNING: " + warning))
         return result.returncode == 0, run
@@ -777,6 +796,7 @@ def _run_preflight(w: Wizard, flags: list[str]) -> tuple[bool, state.PatchRun]:
         if ok:
             return True, run
         LAST_LOG[:] = run.log
+        LAST_ERROR[:] = ["Patch verification failed. Nothing was written."]
         while True:
             size = w.console.size()
             _draw_preflight(w, run, tick, True, False)
@@ -877,6 +897,7 @@ def _done_body(w: Wizard, summary: dict) -> list[str]:
 def _run_install(
     w: Wizard, has_haptics: bool, preflight: state.PatchRun | None = None
 ) -> dict:
+    _remember_flags(w.selection.flags())
     w.preflight = preflight
     bindir = platform.bin_dir(w.game)
     original_existed = (bindir / f"{state.EXE}.original").is_file()
@@ -913,6 +934,7 @@ def _run_install(
             w.screen.end()
             card_log = (preflight.log if preflight else []) + run.log
             LAST_LOG[:] = card_log
+            LAST_ERROR[:] = _failure_body(w, run)
             _await_card(w, "Installation failed", _failure_body(w, run), card_log)
             return {"ok": False}
         stages[1] = ("Applying patches", "done")
@@ -1049,6 +1071,7 @@ def restore_flow(w: Wizard) -> int:
 
 def _interactive_flow(game_arg: str | None, console: ui.Console) -> int:
     LAST_LOG.clear()
+    LAST_ERROR.clear()
     version = state.mod_version(PATCH_SCRIPT)
     console.clear()
     banner(console, version)
@@ -1152,13 +1175,80 @@ def _interactive_flow(game_arg: str | None, console: ui.Console) -> int:
     return 0 if summary.get("ok") else 1
 
 
-def _write_log(lines: list[str]) -> Path | None:
-    path = Path(tempfile.gettempdir()) / "freeplay-installer.log"
-    try:
-        path.write_text("\n".join(lines) + "\n", encoding="utf-8", errors="replace")
-    except OSError:
-        return None
-    return path
+def _remember_flags(flags: list[str]) -> None:
+    text = "Selected flags: " + (" ".join(flags) if flags else "(none)")
+    for index, line in enumerate(LAST_CONTEXT):
+        if line.startswith("Selected flags:"):
+            LAST_CONTEXT[index] = text
+            return
+    LAST_CONTEXT.append(text)
+
+
+def _redact(text: str) -> str:
+    replacements = [
+        (str(Path.home()), "%USERPROFILE%" if os.name == "nt" else "~"),
+        (tempfile.gettempdir(), "%TEMP%" if os.name == "nt" else "$TMPDIR"),
+    ]
+    for raw, replacement in replacements:
+        if raw:
+            text = text.replace(raw, replacement)
+            text = text.replace(raw.replace("\\", "/"), replacement)
+    return text
+
+
+def _log_candidates() -> list[Path]:
+    candidates = [LOG_DIR / LOG_NAME, Path(tempfile.gettempdir()) / LOG_NAME]
+    unique: list[Path] = []
+    for path in candidates:
+        if path not in unique:
+            unique.append(path)
+    return unique
+
+
+def _write_log(console: ui.Console, code: int, traceback_text: str = "") -> Path | None:
+    lines = [
+        "SMT5V Freeplay Installer",
+        f"Version: {state.mod_version(PATCH_SCRIPT)}",
+        f"Time: {datetime.now().astimezone().isoformat(timespec='seconds')}",
+        f"Python: {sys.version.split()[0]}",
+        f"Platform: {sys.platform}",
+        f"Exit code: {code}",
+    ]
+    if LAST_CONTEXT:
+        lines += ["", "--- Context ---", *LAST_CONTEXT]
+    if console.transcript:
+        lines += ["", "--- Installer messages ---", *console.transcript]
+    if LAST_ERROR:
+        lines += ["", "--- Failure ---", *LAST_ERROR]
+    if LAST_LOG:
+        lines += ["", "--- Patcher output ---", *LAST_LOG]
+    if traceback_text:
+        lines += ["", "--- Traceback ---", *traceback_text.rstrip().splitlines()]
+    text = "\n".join(_ANSI.sub("", line) for line in lines)
+    text = _redact(text) + "\n"
+    for path in _log_candidates():
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        return path
+    return None
+
+
+def _write_failure_log(
+    console: ui.Console,
+    code: int,
+    error: list[str] | None = None,
+    traceback_text: str = "",
+) -> None:
+    if error:
+        LAST_ERROR[:] = error
+    path = _write_log(console, code, traceback_text)
+    if path:
+        console.write(f"  Full log: {path}")
+    else:
+        console.write("  Full log: could not be written.")
 
 
 def run_interactive(game_arg: str | None, console: ui.Console) -> int:
@@ -1171,10 +1261,8 @@ def run_interactive(game_arg: str | None, console: ui.Console) -> int:
         console.write("  Freeplay installer finished.")
     else:
         console.write("  Freeplay installer stopped.")
-        if LAST_LOG:
-            path = _write_log(LAST_LOG)
-            if path:
-                console.write(f"  Full log: {path}")
+        if LAST_ERROR or LAST_LOG:
+            _write_failure_log(console, code)
     if console.tty:
         ui.wait_for_enter(console, "Press Enter to close")
     return code
@@ -1182,7 +1270,14 @@ def run_interactive(game_arg: str | None, console: ui.Console) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    LAST_LOG.clear()
+    LAST_ERROR.clear()
+    LAST_CONTEXT.clear()
     game_arg, flags, scripted = split_args(argv)
+    LAST_CONTEXT[:] = [
+        f"Mode: {'scripted' if scripted else 'interactive'}",
+        f"Arguments: {' '.join(argv) if argv else '(none)'}",
+    ]
     console = ui.Console()
     try:
         if scripted:
@@ -1191,6 +1286,16 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         console.write("")
         console.write("  Cancelled.")
+        return 1
+    # Top-level boundary: any unexpected failure must still produce a log.
+    except Exception:  # noqa: BLE001
+        console.write("")
+        console.write("  Installer crashed.")
+        _write_failure_log(
+            console, 1, ["Unexpected exception."], traceback.format_exc()
+        )
+        if console.tty:
+            ui.wait_for_enter(console, "Press Enter to close")
         return 1
 
 

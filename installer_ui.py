@@ -65,6 +65,7 @@ class Console:
         self.alt_screen = self.ansi
         self.color = self.ansi and not os.environ.get("NO_COLOR")
         self.unicode = self.ansi and _unicode_ok()
+        self.transcript: list[str] = []
 
     def width(self) -> int:
         return max(40, min(100, shutil.get_terminal_size((80, 24)).columns))
@@ -114,6 +115,7 @@ class Console:
         return "✗" if self.unicode else "x"
 
     def write(self, text: str = "") -> None:
+        self.transcript.append(text)
         sys.stdout.write(text + "\n")
         sys.stdout.flush()
 
