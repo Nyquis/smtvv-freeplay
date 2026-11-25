@@ -69,13 +69,24 @@ def test_mods_screen_select_all_and_none(monkeypatch, tmp_path):
     assert all(wizard.selection.mods.values())
 
 
-def test_gameplay_screen_changes_all_three_options(monkeypatch, tmp_path):
+def test_gameplay_screen_changes_all_four_options(monkeypatch, tmp_path):
     wizard = _wizard(monkeypatch, tmp_path)
-    _keys(monkeypatch, "right", "down", "right", "down", "right", "enter")
+    _keys(
+        monkeypatch,
+        "right",
+        "down",
+        "right",
+        "down",
+        "right",
+        "down",
+        "right",
+        "enter",
+    )
     assert entry.screen_gameplay(wizard) == "next"
     assert wizard.selection.item_hacks == "refill"
     assert wizard.selection.magatsuhi == "battle"
     assert wizard.selection.autosave == 1
+    assert wizard.selection.normal_miracles == "unlocked"
 
 
 def test_gameplay_screen_back_does_not_apply(monkeypatch, tmp_path):
@@ -162,11 +173,13 @@ def test_restore_flow_puts_the_original_back(monkeypatch, tmp_path):
     (binary / state.FEATURES).write_text("heal=1\n", encoding="utf-8")
     paks = wizard.game.joinpath(*state.PAKS_PARTS)
     paks.mkdir(parents=True)
+    (paks / "pakchunk99_Miracles_P.pak").write_bytes(b"pak")
     (paks / "pakchunk99_NGPlusMiracles_P.pak").write_bytes(b"pak")
     _keys(monkeypatch, "enter")
     assert entry.restore_flow(wizard) == 0
     assert (binary / state.EXE).read_bytes() == b"original"
     assert not (binary / state.FEATURES).exists()
+    assert not (paks / "pakchunk99_Miracles_P.pak").exists()
     assert not (paks / "pakchunk99_NGPlusMiracles_P.pak").exists()
 
 

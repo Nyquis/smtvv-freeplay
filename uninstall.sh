@@ -52,10 +52,15 @@ else
     echo "Verify integrity of game files to restore the executable."
 fi
 
-MIRACLE_PAK="$GAMEDIR/Project/Content/Paks/pakchunk99_NGPlusMiracles_P.pak"
+MIRACLE_PAK="$GAMEDIR/Project/Content/Paks/pakchunk99_Miracles_P.pak"
 if [ -f "$MIRACLE_PAK" ]; then
-    echo "Removing NG+ miracle data pak..."
+    echo "Removing miracle data pak..."
     rm -f "$MIRACLE_PAK"
+fi
+LEGACY_MIRACLE_PAK="$GAMEDIR/Project/Content/Paks/pakchunk99_NGPlusMiracles_P.pak"
+if [ -f "$LEGACY_MIRACLE_PAK" ]; then
+    echo "Removing legacy NG+ miracle data pak..."
+    rm -f "$LEGACY_MIRACLE_PAK"
 fi
 
 SHOP_PAK="$GAMEDIR/Project/Content/Paks/pakchunk98_FreeplayShop_P.pak"

@@ -32,6 +32,7 @@ def synthetic_layout(monkeypatch):
                 "MIRACLE_ADDED_TRAMP",
                 "MIRACLE_STATE_TRAMP",
                 "MIRACLE_666_NOP_ADDR",
+                "MIRACLE_OPEN_TRAMP",
             ),
         ),
         (gp, ("ITEM_GET", "ITEM_GET_MAX", "ITEM_GET_NUM", "ITEM_IS_GOTTEN")),
@@ -48,7 +49,7 @@ def synthetic_layout(monkeypatch):
             ),
         ),
         (newborn, ("RENEWAL_JMP", "RENEWAL_IMPL", "BOOK_RESET")),
-        (stockpile, ("ITEM_GET_MAX", "ITEM_GET_NUM")),
+        (stockpile, ("ITEM_GET_MAX", "ITEM_GET_NUM", "ITEM_ERASE")),
     ):
         for name in names:
             monkeypatch.setattr(module, name, getattr(module, name))
@@ -243,7 +244,7 @@ def test_verification_groups_match_the_sites_each_feature_patches():
     }
     stockpile_offsets = {offset for offset, _len, _orig in sites["stockpile"]}
     assert gp.off(gp.ITEM_GET_MAX) in stockpile_offsets
-    assert gp.off(gp.ITEM_GET_NUM) in stockpile_offsets
+    assert gp.off(gp.ITEM_GET_NUM) not in stockpile_offsets
     assert gp.off(gp.ITEM_GET) not in stockpile_offsets
 
 
@@ -289,8 +290,10 @@ def test_feature_apply_paths_resolve():
 
 
 def test_feature_paks_are_unique_and_owned_by_a_feature():
-    paks = [pak for _key, pak in patch_manifest.FEATURE_PAKS]
-    assert len(paks) == len(set(paks))
+    # NG+ and normal miracles share one GodParameterDataTable override, so a
+    # pak name may legitimately appear for more than one feature key.
+    keys = [key for key, _pak in patch_manifest.FEATURE_PAKS]
+    assert len(keys) == len(set(keys))
     for feature in patch_manifest.FEATURES:
         if feature.pak is not None:
             assert (feature.key, feature.pak) in patch_manifest.FEATURE_PAKS

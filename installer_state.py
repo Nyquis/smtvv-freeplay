@@ -78,7 +78,8 @@ MODS = (
     Mod(
         "miracles",
         "NG+ Miracles",
-        "NG+ miracles are unlocked from the start.",
+        "NG+ miracles are unlocked from the start. Normal miracles have their "
+        "own option on the Gameplay screen.",
         "",
         "--no-miracles",
     ),
@@ -148,12 +149,18 @@ PATCH_MODS = tuple(mod for mod in MODS if mod.patched)
 
 MAGATSUHI_MODES = ("none", "battle", "chain")
 ITEM_HACKS = ("none", "refill", "stockpile")
+NORMAL_MIRACLE_MODES = ("default", "unlocked", "free")
 
 ITEM_LABELS = {"refill": "Battle Refill", "stockpile": "Stockpile", "none": "Neither"}
 MAGATSUHI_LABELS = {
     "none": "Game default",
     "battle": "Every battle",
     "chain": "Once per chain",
+}
+NORMAL_MIRACLE_LABELS = {
+    "default": "Game default",
+    "unlocked": "Unlocked",
+    "free": "Unlocked and free",
 }
 SHOP_LABELS = {
     "default": "Game default",
@@ -173,6 +180,7 @@ class Selection:
     mods: dict[str, bool] = field(default_factory=dict)
     item_hacks: str = "none"
     magatsuhi: str = "none"
+    normal_miracles: str = "default"
     shop: dict[str, str] = field(
         default_factory=lambda: {category: "default" for category in SHOP_CATEGORIES}
     )
@@ -192,6 +200,7 @@ class Selection:
             out.append("--no-magatsuhi")
         elif self.magatsuhi == "chain":
             out.append("--magatsuhi-chain")
+        out.extend(("--normal-miracles", self.normal_miracles))
         if self.item_hacks == "stockpile":
             out.append("--stockpile")
         elif self.item_hacks == "none":
@@ -209,18 +218,22 @@ class Selection:
             mods
             + (1 if self.magatsuhi != "none" else 0)
             + (1 if self.item_hacks != "none" else 0)
+            + (1 if self.normal_miracles != "default" else 0)
             + (1 if self.autosave is not None else 0)
             + (1 if any(mode != "default" for mode in self.shop.values()) else 0)
             + (1 if self.haptics else 0)
         )
 
 
+ABSENT_VALUES = (None, "none", "default", False)
+
+
 def _action(before, after) -> str:
     if after == before:
-        return "keep" if after not in (None, "none", False) else "none"
-    if after in (None, "none", False):
+        return "keep" if after not in ABSENT_VALUES else "none"
+    if after in ABSENT_VALUES:
         return "remove"
-    if before in (None, "none", False):
+    if before in ABSENT_VALUES:
         return "install"
     return "change"
 
@@ -254,6 +267,13 @@ def diff_selection(before: Selection, after: Selection) -> list[Change]:
             Change(
                 f"Item Hacks: {ITEM_LABELS[after.item_hacks]}",
                 _action(before.item_hacks, after.item_hacks),
+            )
+        )
+    if after.normal_miracles != "default" or before.normal_miracles != "default":
+        rows.append(
+            Change(
+                f"Normal Miracles: {NORMAL_MIRACLE_LABELS[after.normal_miracles]}",
+                _action(before.normal_miracles, after.normal_miracles),
             )
         )
     if after.autosave is not None or before.autosave is not None:
@@ -314,6 +334,10 @@ def selection_from(features: dict[str, str]) -> Selection:
     for category in SHOP_CATEGORIES:
         mode = features.get(f"shop_{category}", "default")
         selection.shop[category] = mode if mode in SHOP_MODES else "default"
+    miracles = features.get("miracles_normal", "default")
+    selection.normal_miracles = (
+        miracles if miracles in NORMAL_MIRACLE_MODES else "default"
+    )
     if features.get("shop") == "1":
         selection.shop["growth"] = "immediate"
     try:
@@ -328,7 +352,7 @@ def selection_from(features: dict[str, str]) -> Selection:
 
 def total_mods() -> int:
     """Selectable mod entries: patch mods, Magatsuhi, item hack, autosave, shop."""
-    return len(PATCH_MODS) + 4 + (1 if os.name == "nt" else 0)
+    return len(PATCH_MODS) + 5 + (1 if os.name == "nt" else 0)
 
 
 def autosave_choice(text: str, current: int | None) -> int | None | str:

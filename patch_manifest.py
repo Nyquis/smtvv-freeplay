@@ -28,7 +28,8 @@ import shop_pak
 import signatures
 import stockpile
 
-MIRACLE_PAK = "pakchunk99_NGPlusMiracles_P.pak"
+MIRACLE_PAK = "pakchunk99_Miracles_P.pak"
+LEGACY_MIRACLE_PAK = "pakchunk99_NGPlusMiracles_P.pak"  # previous miracle pak
 LEGACY_MAP_PAK = "pakchunk95_FreeplayMap_P.pak"  # removed Timed Quest Markers
 
 
@@ -85,6 +86,11 @@ def _miracle_sites(data) -> list[tuple[int, int]]:
     )
 
 
+def _normal_miracle_sites(data) -> list[tuple[int, int]]:
+    p = _patcher()
+    return _off_sites(p.MIRACLE_OPEN_TRAMP, p.MIRACLE_OPEN_PATCH)
+
+
 def _compendium_sites(data) -> list[tuple[int, int]]:
     p = _patcher()
     return _resolved_off(data, p.DEVIL_COST_OFFSET, p.DEVIL_COST_ORIG)
@@ -98,7 +104,6 @@ def _stockpile_sites(data) -> list[tuple[int, int]]:
     return (
         _nextstep_sites()
         + _resolved_va(data, gp.ITEM_GET_MAX, gp.ITEM_GET_MAX_ORIG)
-        + _resolved_va(data, gp.ITEM_GET_NUM, gp.ITEM_GET_NUM_ORIG)
         + [
             (code_caves.off(thunk), len(stockpile.MAX_THUNK_ORIG))
             for thunk in stockpile.MAX_THUNKS
@@ -187,6 +192,14 @@ FEATURES = (
         ("--no-miracles",),
         "patcher:miracles",
         _miracle_sites,
+        pak=MIRACLE_PAK,
+    ),
+    Feature(
+        "miracles-normal",
+        "Normal Miracles",
+        ("--normal-miracles",),
+        "patcher:normal-miracles",
+        _normal_miracle_sites,
         pak=MIRACLE_PAK,
     ),
     Feature(
@@ -300,6 +313,8 @@ FEATURES = (
 FEATURE_KEYS = tuple(feature.key for feature in FEATURES)
 
 # (feature key, data pak) written by the patcher when the feature is enabled.
+# Two miracle features share one GodParameterDataTable override, so the same
+# pak name can appear more than once.
 FEATURE_PAKS = tuple(
     (feature.key, feature.pak) for feature in FEATURES if feature.pak is not None
 )
@@ -307,6 +322,7 @@ FEATURE_PAKS = tuple(
 # Substrings that must appear in `repak list` for each generated pak.
 PAK_ENTRIES = {
     "miracles": ("GodParameterDataTable",),
+    "miracles-normal": ("GodParameterDataTable",),
     "stockpile": ("WB_CampItemList",),
     "shop": ("ShopTable",),
     "intro": ("Logo",),
@@ -434,6 +450,7 @@ def relocate(data: bytes | bytearray) -> list[str]:
 
     # File-offset sites in the main patcher.
     _relocate_off(data, patcher, "TRAMP_OFFSET", patcher.TRAMP_ORIG, "essences", notes)
+    stockpile.ITEM_ERASE = code_caves.va(patcher.TRAMP_OFFSET)
     _relocate_off(
         data,
         patcher,
@@ -472,6 +489,14 @@ def relocate(data: bytes | bytearray) -> list[str]:
         "MIRACLE_666_NOP_ADDR",
         patcher.MIRACLE_666_ORIG,
         "miracles.nop666",
+        notes,
+    )
+    _relocate_off(
+        data,
+        patcher,
+        "MIRACLE_OPEN_TRAMP",
+        patcher.MIRACLE_OPEN_ORIG,
+        "miracles.normal",
         notes,
     )
 

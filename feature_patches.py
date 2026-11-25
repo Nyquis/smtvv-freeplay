@@ -185,6 +185,16 @@ def patch_miracles(
     return next_cave_off, mc1, len(sc_a), mc2, len(sc_s)
 
 
+def patch_normal_miracles(data: bytearray) -> int:
+    """Normal Miracles: force the abscess/story unlock check to true."""
+    p = _patcher()
+    site = p.MIRACLE_OPEN_TRAMP
+    if bytes(data[site : site + 5]) != p.MIRACLE_OPEN_ORIG:
+        raise RuntimeError(f"Miracle open AOB mismatch at 0x{site:08X}")
+    data[site : site + 5] = p.MIRACLE_OPEN_PATCH
+    return site
+
+
 def patch_compendium(data: bytearray) -> int | None:
     """Free Compendium: make the summon cost formula return zero."""
     p = _patcher()

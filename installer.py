@@ -369,9 +369,17 @@ def screen_gameplay(w: Wizard) -> str:
         ("chain", "Once per chain"),
         ("none", "Game default"),
     ]
+    normal_miracles = [
+        ("default", "Game default"),
+        ("unlocked", "Unlocked"),
+        ("free", "Unlocked and free"),
+    ]
     slots: list[int | None] = [None, *range(state.AUTOSAVE_MIN, state.AUTOSAVE_MAX + 1)]
     hack_index = [value for value, _ in hacks].index(w.selection.item_hacks)
     mode_index = [value for value, _ in magatsuhi].index(w.selection.magatsuhi)
+    miracle_index = [value for value, _ in normal_miracles].index(
+        w.selection.normal_miracles
+    )
     slot_index = (
         slots.index(w.selection.autosave) if w.selection.autosave in slots else 0
     )
@@ -385,6 +393,9 @@ def screen_gameplay(w: Wizard) -> str:
         "Game default leaves the gauge alone.",
         2: "Autosave writes one slot after every battle, overwriting that slot each "
         "time. Off disables it.",
+        3: "Unlocked makes every normal miracle available in the World of Shadows "
+        "from the start, at its normal Glory price. Unlocked and free also removes "
+        "the prices. Tier order is kept, and NG+ miracles keep their own switch.",
     }
 
     if not w.console.tty:
@@ -393,6 +404,9 @@ def screen_gameplay(w: Wizard) -> str:
         ][0]
         w.selection.magatsuhi = magatsuhi[
             _plain_choice(w.console, "Full Magatsuhi", magatsuhi, mode_index)
+        ][0]
+        w.selection.normal_miracles = normal_miracles[
+            _plain_choice(w.console, "Normal Miracles", normal_miracles, miracle_index)
         ][0]
         while True:
             answer = ui.ask_text(
@@ -425,6 +439,7 @@ def screen_gameplay(w: Wizard) -> str:
 
             hack_label = dict(hacks)[w.selection.item_hacks]
             mode_label = dict(magatsuhi)[w.selection.magatsuhi]
+            miracle_label = dict(normal_miracles)[w.selection.normal_miracles]
             slot_label = (
                 "Off"
                 if w.selection.autosave is None
@@ -434,6 +449,7 @@ def screen_gameplay(w: Wizard) -> str:
                 ("Item Hacks", arrow(hack_label, focus == 0)),
                 ("Full Magatsuhi", arrow(mode_label, focus == 1)),
                 ("Autosave", arrow(slot_label, focus == 2)),
+                ("Normal Miracles", arrow(miracle_label, focus == 3)),
             ]
             body = []
             for index, (label, value) in enumerate(rows):
@@ -455,9 +471,9 @@ def screen_gameplay(w: Wizard) -> str:
             if key is None:
                 continue
             if key == "up":
-                focus = (focus - 1) % 3
+                focus = (focus - 1) % 4
             elif key == "down":
-                focus = (focus + 1) % 3
+                focus = (focus + 1) % 4
             elif key in ("left", "right", "space"):
                 if focus == 0:
                     hack_index = (hack_index + (1 if key != "left" else -1)) % len(
@@ -469,11 +485,16 @@ def screen_gameplay(w: Wizard) -> str:
                         magatsuhi
                     )
                     w.selection.magatsuhi = magatsuhi[mode_index][0]
-                else:
+                elif focus == 2:
                     slot_index = (slot_index + (1 if key != "left" else -1)) % len(
                         slots
                     )
                     w.selection.autosave = slots[slot_index]
+                else:
+                    miracle_index = (
+                        miracle_index + (1 if key != "left" else -1)
+                    ) % len(normal_miracles)
+                    w.selection.normal_miracles = normal_miracles[miracle_index][0]
             elif key == "enter":
                 break
             elif key in ("esc", "q"):

@@ -102,13 +102,13 @@ import shop_pak
 import signatures
 import stockpile
 from code_caves import IMAGE_BASE, RDATA_RAW, RDATA_VA
-from patch_manifest import LEGACY_MAP_PAK, MIRACLE_PAK
+from patch_manifest import LEGACY_MAP_PAK, LEGACY_MIRACLE_PAK, MIRACLE_PAK
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-MOD_VERSION = "5.31.0"
+MOD_VERSION = "5.32.0"
 FEATURES_FILE = "Freeplay.features"  # installed features, kept next to the executable
 
 EXE_NAME = "SMT5V-Win64-Shipping.exe"
@@ -173,6 +173,28 @@ MIRACLE_666_ORIG = bytes.fromhex("0f84d9010000")
 # Miracle IDs/enums to force-unlock (both 0-based and 1-based to cover
 # all code paths: some functions use enum=ID-1, others use raw ID)
 MIRACLE_UNLOCK_IDS = [22, 23, 24, 30, 31, 32]
+
+# Normal (abscess/story) miracle unlock: IsGodParameterOpen is a 5-byte jump
+# thunk, so every caller consults it before the save flags. Replacing it with
+# "return true" satisfies every open condition without touching save data.
+MIRACLE_OPEN_TRAMP = 0x00AD8C80
+MIRACLE_OPEN_ORIG = bytes([0xE9, 0x0B, 0x95, 0x92, 0x06])
+MIRACLE_OPEN_PATCH = bytes([0xB0, 0x01, 0xC3, 0x90, 0x90])  # mov al,1; ret
+
+# GodParameterDataTable rows: TBL1 header, then fixed rows.  Row IDs are the
+# table IDs; the section field is 0 for placeholder rows.
+GP_ROW_SIZE = 20
+GP_ROW_ID_OFF = 0
+GP_ROW_SECTION_OFF = 2
+GP_ROW_CONDITION_OFF = 8
+GP_ROW_COST_OFF = 12
+
+# Rows the normal-miracle edits leave alone: the NG+ set has its own feature,
+# and 137/145 are unlocked by beating specific enemies (save-state sentinels).
+MIRACLE_NG_PLUS_IDS = frozenset(MIRACLE_UNLOCK_IDS)
+MIRACLE_SPECIAL_IDS = frozenset({137, 145})
+
+NORMAL_MIRACLE_MODES = ("default", "unlocked", "free")
 
 # Demon cost formula (compendium summon price). Called by
 # CalcDevilCost_ByBibleData / _ByDevilData / _ByPartyData; returns the
@@ -595,10 +617,51 @@ def run_repak(repak: str, *args: str) -> bytes:
     return proc.stdout
 
 
-def build_miracle_pak(game_dir: str) -> None:
+def _miracle_table_rows(gp_data: bytes) -> tuple[int, int, int]:
+    """(row count, row size, offset of the first row) of the TBL1 table."""
+    magic = gp_data.find(b"TBL1")
+    if magic < 0:
+        raise RuntimeError("GodParameterDataTable has no TBL1 section — game update?")
+    body_len, row_size, _header = struct.unpack_from("<III", gp_data, magic + 4)
+    if row_size < GP_ROW_SIZE or body_len % row_size:
+        raise RuntimeError("unexpected GodParameterDataTable row layout")
+    return body_len // row_size, row_size, magic + 16
+
+
+def _normal_miracle_rows(gp_data: bytes) -> list[int]:
+    """Row offsets of real normal miracles, excluding NG+ and sentinel rows."""
+    count, row_size, first = _miracle_table_rows(gp_data)
+    rows = []
+    for index in range(count):
+        offset = first + index * row_size
+        row_id = struct.unpack_from("<H", gp_data, offset + GP_ROW_ID_OFF)[0]
+        section = struct.unpack_from("<H", gp_data, offset + GP_ROW_SECTION_OFF)[0]
+        if not section or row_id in MIRACLE_NG_PLUS_IDS:
+            continue
+        if row_id in MIRACLE_SPECIAL_IDS:
+            continue
+        rows.append(offset)
+    return rows
+
+
+def zero_normal_miracle_costs(gp_data: bytearray) -> int:
+    """Clear the Glory cost of every normal miracle; returns the row count."""
+    rows = _normal_miracle_rows(gp_data)
+    if not rows:
+        raise RuntimeError("no normal miracle rows found — game update?")
+    for offset in rows:
+        struct.pack_into("<H", gp_data, offset + GP_ROW_COST_OFF, 0)
+    return len(rows)
+
+
+def build_miracle_pak(game_dir: str, *, ngplus: bool, free: bool) -> int:
     """Extract GodParameterDataTable from the user's pakchunk0, apply the
-    NG+ edits (F5=1, F6=0 for the unlocked miracle rows), and pack it as
-    an override pak. Raises RuntimeError with a user-facing reason."""
+    selected miracle edits, and pack it as an override pak.
+
+    NG+ applies the F5=1, F6=0 edits to its hardcoded rows; free zeroes the
+    Glory cost of every normal row. Raises RuntimeError with a user-facing
+    reason. Returns how many normal rows were made free.
+    """
     import tempfile
 
     paks_dir = os.path.join(game_dir, PAKS_SUBPATH)
@@ -644,10 +707,12 @@ def build_miracle_pak(game_dir: str) -> None:
             f"expected ({len(gp_data)} bytes) — game update?"
         )
 
-    for idx in [22, 23, 30, 31]:
-        goff = 89 + idx * 20
-        gp_data[goff + 7] = 1
-        struct.pack_into("<I", gp_data, goff + 8, 0)
+    if ngplus:
+        for idx in [22, 23, 30, 31]:
+            goff = 89 + idx * 20
+            gp_data[goff + 7] = 1
+            struct.pack_into("<I", gp_data, goff + 8, 0)
+    zeroed = zero_normal_miracle_costs(gp_data) if free else 0
 
     staging = tempfile.mkdtemp(prefix="smtvv_gp_")
     try:
@@ -668,6 +733,7 @@ def build_miracle_pak(game_dir: str) -> None:
                 os.remove(pak_tmp)
     finally:
         shutil.rmtree(staging, ignore_errors=True)
+    return zeroed
 
 
 # ---------------------------------------------------------------------------
@@ -822,6 +888,12 @@ def main() -> None:
         "--no-miracles", action="store_true", help="Skip the NG+ Miracles Unlock patch"
     )
     parser.add_argument(
+        "--normal-miracles",
+        choices=NORMAL_MIRACLE_MODES,
+        default="default",
+        help="Normal miracles: default, unlocked or unlocked and free",
+    )
+    parser.add_argument(
         "--no-compendium", action="store_true", help="Skip the Free Compendium patch"
     )
     parser.add_argument(
@@ -907,6 +979,9 @@ def main() -> None:
     do_heal = not args.no_heal
     do_mimans = not args.no_mimans
     do_miracles = not args.no_miracles
+    normal_miracles_mode = args.normal_miracles
+    do_normal_miracles = normal_miracles_mode != "default"
+    do_free_miracles = normal_miracles_mode == "free"
     do_compendium = not args.no_compendium
     do_stockpile = args.stockpile
     do_refill = not args.no_refill and not do_stockpile
@@ -936,6 +1011,7 @@ def main() -> None:
         "mimans": do_mimans,
         "leylines": do_leylines,
         "miracles": do_miracles,
+        "miracles-normal": do_normal_miracles,
         "compendium": do_compendium,
         "refill": do_refill,
         "stockpile": do_stockpile,
@@ -990,6 +1066,7 @@ def main() -> None:
     if not check:
         for pak in (
             MIRACLE_PAK,
+            LEGACY_MIRACLE_PAK,
             shop_pak.SHOP_PAK,
             boot_pak.BOOT_PAK,
             quest_pak.QUEST_PAK,
@@ -1111,6 +1188,7 @@ def main() -> None:
             ("Leylines", do_leylines),
             ("Reveal", do_reveal),
             ("Miracles", do_miracles),
+            ("Normal Miracles", do_normal_miracles),
             ("Compendium", do_compendium),
             ("Refill", do_refill),
             ("Stockpile", do_stockpile),
@@ -1231,6 +1309,7 @@ def main() -> None:
     # ==================================================================
     # PATCH: NG+ Miracles Unlock
     # ==================================================================
+    miracles_ok = False
     if do_miracles:
         try:
             result = feature_patches.patch_miracles(
@@ -1238,38 +1317,70 @@ def main() -> None:
             )
         except RuntimeError as exc:
             print(f"\n  WARNING: {exc} - skipping executable miracle hooks")
-            miracles_ok = False
         else:
             next_cave_off, mc1, size_a, mc2, size_s = result
             miracles_ok = True
             patch_num += 1
             print(f"\n  [{patch_num}/{total}] NG+ Miracles Unlock")
             print(
-                f"    Code caves    : 0x{mc1:08X} ({size_a}B)"
-                f" + 0x{mc2:08X} ({size_s}B)"
+                f"    Code caves    : 0x{mc1:08X} ({size_a}B) + 0x{mc2:08X} ({size_s}B)"
             )
             print(f"    NOP 666-block : 0x{MIRACLE_666_NOP_ADDR:08X}")
 
-        # 3. Build data pak from the user's own game data
-        #    (F5=1, F6=0, keep original Glory costs)
-        if miracles_ok:
-            try:
-                if check:
-                    print("    Data pak      : check only")
-                    ok("miracles")
-                else:
-                    build_miracle_pak(game_dir)
-                    print(f"    Data pak      : {MIRACLE_PAK}")
-                    ok("miracles")
-            except RuntimeError as exc:
-                print(f"    WARNING: NG+ miracle data pak not built — {exc}")
-                print(
-                    "             The miracle shop hooks are still "
-                    "installed, but some NG+ miracles may stay locked."
+    # ==================================================================
+    # PATCH: Normal Miracles Unlock
+    # ==================================================================
+    normal_miracles_ok = False
+    if do_normal_miracles:
+        try:
+            site = feature_patches.patch_normal_miracles(data)
+        except RuntimeError as exc:
+            print(f"\n  WARNING: {exc} - skipping normal miracle unlock")
+        else:
+            normal_miracles_ok = True
+            patch_num += 1
+            print(f"\n  [{patch_num}/{total}] Normal Miracles Unlock")
+            print(f"    Open condition: 0x{site:08X}  -> true")
+
+    # ------------------------------------------------------------------
+    # One GodParameterDataTable override serves both miracle features:
+    # NG+ condition edits when selected, free normal prices when selected.
+    # ------------------------------------------------------------------
+    need_ng_plus = do_miracles and miracles_ok
+    need_free = do_normal_miracles and do_free_miracles and normal_miracles_ok
+    if need_ng_plus or need_free:
+        try:
+            if check:
+                print(f"    Data pak      : check only ({MIRACLE_PAK} not written)")
+            else:
+                zeroed = build_miracle_pak(
+                    game_dir, ngplus=need_ng_plus, free=need_free
                 )
-                fail("miracles")
+                print(f"    Data pak      : {MIRACLE_PAK}")
+                if zeroed:
+                    print(f"    Prices zeroed : {zeroed} rows")
+        except RuntimeError as exc:
+            print(f"    WARNING: miracle data pak not built — {exc}")
+            if need_ng_plus:
+                print(
+                    "             The NG+ hooks are still installed, but some "
+                    "NG+ miracles may stay locked."
+                )
+                miracles_ok = False
+            if need_free:
+                print("             Normal miracles stay at their normal Glory prices.")
+                normal_miracles_ok = False
+
+    if do_miracles:
+        if miracles_ok:
+            ok("miracles")
         else:
             fail("miracles")
+    if do_normal_miracles:
+        if normal_miracles_ok:
+            ok("miracles-normal")
+        else:
+            fail("miracles-normal")
 
     # ==================================================================
     # PATCH: Free Compendium
@@ -1727,6 +1838,10 @@ def main() -> None:
     lines.append(f"autosave={autosave_slot if results.get('autosave') else 0}")
     for category, mode in shop_modes.items():
         lines.append(f"shop_{category}={mode if results.get('shop') else 'default'}")
+    lines.append(
+        "miracles_normal="
+        + (normal_miracles_mode if results.get("miracles-normal") else "default")
+    )
     lines.append(f"reveal={args.reveal if results.get('reveal') else 'none'}")
     lines.append(f"game_hash={live_hash}")
     with open(

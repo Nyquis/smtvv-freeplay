@@ -16,12 +16,14 @@ show the normal limit and stock above it as e.g. 11/10. STOCK_PAK carries
 the camp item list widget with its "count == max" colour check turned into
 "count >= max".
 
-When a battle enters E_BTL_STEP_PRE, the stock above each item's normal
-limit is recorded as a hidden amount; until the battle reaches
-E_BTL_STEP_END_EVENT, ItemGetNum reports the real count minus that hidden
-amount (never below 0), and the battle menus' ItemGetMaxNum (the Blueprint
-call) reports the normal limit. Items used in battle come out of the real
-stock.
+When a battle enters E_BTL_STEP_PRE, the stock above each item's normal limit
+is taken out of the real inventory with ItemErase and recorded; until the
+battle reaches E_BTL_STEP_END_EVENT, ItemGetMaxNum reports the normal limit to
+the battle menus. At the end steps the set-aside stock is added back with
+ItemGet. Because the real inventory is capped for the whole battle, every
+consume check sees the per-battle allowance instead of only the UI counter.
+Leftovers from a battle that ended without its end step are restored at the
+next PRE, so they cannot be lost.
 """
 
 from __future__ import annotations
@@ -35,10 +37,12 @@ from gameplay_patches import (
     BTL_NEXTSTEP_OFF,
     BTL_STEP_END_EVENT,
     BTL_STEP_PRE,
+    ITEM_GET,
     ITEM_GET_MAX,
     ITEM_GET_MAX_ORIG,
     ITEM_GET_NUM,
     ITEM_GET_NUM_ORIG,
+    ITEM_GET_ORIG,
     SETNEXTSTEP_ORIG,
     SETNEXTSTEP_THUNKS,
 )
@@ -52,6 +56,10 @@ ITEM_MAX_OFF = 58          # u8 carry limit
 ITEM_BATTLE_OFF = 61       # nonzero: usable in battle
 STOCK_MAX = 99
 ID_MAX = 135               # use items are 1..135
+
+# ItemErase entry thunk (also the Essences hook site). The patcher updates this
+# VA when it relocates the site.
+ITEM_ERASE = 0x140ACE740
 
 STOCK_ACTIVE = 0x1549A9900   # spare zeroed bytes in a writable section page
 STOCK_LAST_ID = 0x1549A9908  # item ID of the latest ItemGetMaxNum call
@@ -98,18 +106,8 @@ def battle_item_limits(uexp: bytes) -> dict[int, int]:
     return limits
 
 
-def _show_count(raw: int, hidden: int, limit: int) -> tuple[int, int]:
-    """Visible battle count and updated hidden excess.
-
-    Boss Rush refills the real stock after E_BTL_STEP_PRE, so the snapshot can
-    be stale. Recomputing the excess on a read keeps the menu at the normal
-    per-battle limit.
-    """
-    shown = max(raw - hidden, 0)
-    if limit and shown > limit:
-        hidden = raw - limit
-        shown = limit
-    return shown, hidden
+def u32(value: int) -> str:
+    return struct.pack("<I", value).hex()
 
 
 def _cave_va(c: list[int]) -> int:
@@ -120,6 +118,94 @@ def _cave_va(c: list[int]) -> int:
     cave.
     """
     return c[0] + c[2] if len(c) > 2 else va(c[0])
+
+
+def item_erase_va() -> int:
+    """ItemErase entry. The essences feature may redirect it through a cave."""
+    return ITEM_ERASE
+
+
+def _step_code(
+    base_va: int,
+    prev: int | None,
+    limits_va: int,
+    hidden_va: int,
+    active_va: int,
+    item_get: int,
+    item_get_num: int,
+    item_erase: int,
+) -> bytes:
+    """SetNextStep hook: set the excess aside at PRE, restore it at the end."""
+    a = Asm(base_va)
+    a.raw("53 56 57 48 83 EC 20 48 89 CB")  # push rbx/rsi/rdi; sub rsp,20h
+    if prev is not None:
+        a.call(prev)
+    a.raw("0F B6 83" + u32(BTL_NEXTSTEP_OFF))  # movzx eax, m_NextStep
+    a.raw(f"83 F8 {BTL_STEP_PRE:02x}").jne("end")
+
+    # PRE: restore anything a previous battle left set aside.
+    a.raw("31 F6")  # xor esi, esi
+    a.label("restore")
+    a.raw("FF C6")  # inc esi
+    a.raw("81 FE" + u32(ID_MAX))
+    a.ja("snapshot")
+    a._rel("48 8D 0D", hidden_va)  # lea rcx, [hidden]
+    a.raw("0F B6 14 31")  # movzx edx, byte [rcx+rsi]
+    a.raw("85 D2").je("restore")
+    a.raw("89 F1").call(item_get)  # mov ecx, esi; ItemGet(id, count)
+    a._rel("48 8D 0D", hidden_va)
+    a.raw("C6 04 31 00")  # mov byte [rcx+rsi], 0
+    a.jmp("restore")
+
+    # PRE: take the excess out of the real inventory.
+    a.label("snapshot")
+    a.raw("31 F6")  # xor esi, esi
+    a.label("snap")
+    a.raw("FF C6")  # inc esi
+    a.raw("81 FE" + u32(ID_MAX))
+    a.ja("active")
+    a._rel("48 8D 05", limits_va)  # lea rax, [limits]
+    a.raw("0F B6 3C 30")  # movzx edi, byte [rax+rsi]
+    a.raw("85 FF").je("snap")
+    a.raw("89 F1").call(item_get_num)  # eax = real count
+    a.raw("29 F8")  # sub eax, edi
+    a.jle("zero")
+    a._rel("48 8D 0D", hidden_va)
+    a.raw("88 04 31")  # mov [hidden+rsi], al
+    a.raw("89 C2")  # mov edx, eax
+    a.raw("89 F1").call(item_erase)  # ItemErase(id, extra)
+    a.jmp("snap")
+    a.label("zero")
+    a._rel("48 8D 0D", hidden_va)
+    a.raw("C6 04 31 00")
+    a.jmp("snap")
+
+    a.label("active")
+    a.raw("B0 01")._rel("88 05", active_va)
+    a.jmp("done")
+
+    # End steps: add the set-aside stock back.
+    a.label("end")
+    a.raw(f"83 F8 {BTL_STEP_END_EVENT:02x}")
+    a._rel("0F 82", "done")
+    a.raw("31 F6")  # xor esi, esi
+    a.label("restore_end")
+    a.raw("FF C6")  # inc esi
+    a.raw("81 FE" + u32(ID_MAX))
+    a.ja("cleared")
+    a._rel("48 8D 0D", hidden_va)
+    a.raw("0F B6 14 31")
+    a.raw("85 D2").je("restore_end")
+    a.raw("89 F1").call(item_get)
+    a._rel("48 8D 0D", hidden_va)
+    a.raw("C6 04 31 00")
+    a.jmp("restore_end")
+    a.label("cleared")
+    a.raw("31 C0")._rel("88 05", active_va)
+
+    a.label("done")
+    a.raw("48 83 C4 20 5F 5E 5B C3")
+    return a.build()
 
 
 def patch_stockpile(data: bytearray, cave_off: int, cave_end: int,
@@ -150,18 +236,18 @@ def _patch_stockpile(data: bytearray, cave_off: int, cave_end: int,
         if data[off(t) : off(t) + 5] != MAX_THUNK_ORIG:
             return None
     for fn, expected in (
+        (ITEM_GET, ITEM_GET_ORIG),
         (ITEM_GET_NUM, ITEM_GET_NUM_ORIG),
         (ITEM_GET_MAX, ITEM_GET_MAX_ORIG),
     ):
         if data[off(fn) : off(fn) + 5] != expected:
             return None
+    if data[off(ITEM_ERASE)] != 0xE9:
+        return None
     for slot, thunk in MAX_SLOTS:
         if struct.unpack_from("<Q", data, _file_off(data, slot))[0] != thunk:
             return None
-    num_orig = ITEM_GET_NUM + 5 + struct.unpack_from("<i", data, off(ITEM_GET_NUM) + 1)[0]
     limits = bytes(orig.get(i, 0) for i in range(ID_MAX + 1))
-
-    def u32(v): return struct.pack("<I", v).hex()
 
     # Reserve the limits table before the hooks so both the battle and menu
     # hooks can read it. It is read-only data in the code cave.
@@ -173,72 +259,25 @@ def _patch_stockpile(data: bytearray, cave_off: int, cave_end: int,
         data, cave_off, cave_end, limits, base_va=limits_va, check_refs=True
     )
 
-    # ItemGetNum: subtract the hidden stock while a battle is running, and
-    # re-clamp when a Boss Rush refill lands after the PRE snapshot.
-    a = Asm(va(cave_off))
-    a.raw("53 48 83 EC 20 89 CB")                 # push rbx; sub rsp,20h; mov ebx,ecx
-    a.call(num_orig)
-    a._rel("8A 0D", STOCK_ACTIVE).raw("84 C9").je("done")
-    a.raw("81 FB" + u32(ID_MAX)).ja("done")
-    a.raw("89 C2")                                # mov edx, eax (raw)
-    a._rel("48 8D 0D", STOCK_HIDDEN)
-    a.raw("0F B6 0C 19")                          # movzx ecx, byte [rcx+rbx]
-    a.raw("29 C8")                                # sub eax, ecx
-    a._rel("0F 8D", "nonneg")                     # jge nonneg
-    a.raw("31 C0")                                # xor eax,eax
-    a.label("nonneg")
-    a._rel("4C 8D 05", limits_va)                 # lea r8, [limits]
-    a.raw("41 0F B6 0C 18")                       # movzx ecx, byte [r8+rbx]
-    a.raw("85 C9").je("done")                     # test ecx,ecx; je done
-    a.raw("39 C8")                                # cmp eax, ecx
-    a._rel("0F 86", "done")                       # jbe done
-    a.raw("29 CA")                                # sub edx, ecx
-    a._rel("4C 8D 05", STOCK_HIDDEN)              # lea r8, [hidden]
-    a.raw("41 88 14 18")                          # mov [r8+rbx], dl
-    a.raw("89 C8")                                # mov eax, ecx
-    a.label("done")
-    a.raw("48 83 C4 20 5B C3")
-    dest = va(cave_off)
-    cave_off = _place(data, cave_off, cave_end, a.build())
-    _jmp_site(data, ITEM_GET_NUM, dest, 5)
-
-    # SetNextStep: record the hidden stock at PRE, stop hiding at END_EVENT.
-    def step_build(prev=None, call_prev=True):
-        def build(a):
-            a.raw("53 56 57 48 83 EC 20 48 89 CB")    # push rbx/rsi/rdi; sub rsp,20h; mov rbx,rcx
-            if call_prev:
-                a.call(prev)
-            a.raw("0F B6 83" + u32(BTL_NEXTSTEP_OFF))  # movzx eax, m_NextStep
-            a.raw("83 F8 %02x" % BTL_STEP_PRE).jne("end")
-            a.raw("BE 01 00 00 00")                   # mov esi, 1
-            a.label("loop")
-            a._rel("48 8D 05", limits_va)
-            a.raw("0F B6 3C 30")                      # movzx edi, byte [rax+rsi]
-            a.raw("31 C0 85 FF").je("store")          # no limit: hide nothing
-            a.raw("89 F1").call(num_orig)
-            a.raw("29 F8")                            # sub eax, edi
-            a._rel("0F 8F", "store")                  # jg store
-            a.raw("31 C0")
-            a.label("store")
-            a._rel("48 8D 0D", STOCK_HIDDEN)
-            a.raw("88 04 31")                         # mov [rcx+rsi], al
-            a.raw("FF C6 81 FE" + u32(ID_MAX)).jle("loop")
-            a.raw("B0 01")._rel("88 05", STOCK_ACTIVE)
-            a.jmp("done")
-            a.label("end")
-            a.raw("83 F8 %02x" % BTL_STEP_END_EVENT)
-            a._rel("0F 82", "done")                   # jb done
-            a.raw("31 C0")._rel("88 05", STOCK_ACTIVE)
-            a.label("done")
-            a.raw("48 83 C4 20 5F 5E 5B C3")
-            return a
-
-        return build
-
+    # SetNextStep: at PRE take the stock above each item's normal limit out of
+    # the real inventory; at the end steps add it back.
+    erase_va = item_erase_va()
     if gameplay_patches.DEFER_SETNEXTSTEP:
         dest = va(cave_off)
         cave_off = _place(
-            data, cave_off, cave_end, step_build(None, False)(Asm(dest)).build()
+            data,
+            cave_off,
+            cave_end,
+            _step_code(
+                dest,
+                None,
+                limits_va,
+                STOCK_HIDDEN,
+                STOCK_ACTIVE,
+                ITEM_GET,
+                ITEM_GET_NUM,
+                erase_va,
+            ),
         )
         gameplay_patches.DEFERRED_STEPS["stockpile"] = dest
     else:
@@ -246,7 +285,19 @@ def _patch_stockpile(data: bytearray, cave_off: int, cave_end: int,
             prev = t + 5 + struct.unpack_from("<i", data, off(t) + 1)[0]
             dest = va(cave_off)
             cave_off = _place(
-                data, cave_off, cave_end, step_build(prev, True)(Asm(dest)).build()
+                data,
+                cave_off,
+                cave_end,
+                _step_code(
+                    dest,
+                    prev,
+                    limits_va,
+                    STOCK_HIDDEN,
+                    STOCK_ACTIVE,
+                    ITEM_GET,
+                    ITEM_GET_NUM,
+                    erase_va,
+                ),
             )
             _jmp_site(data, t, dest, 5)
 
@@ -334,9 +385,16 @@ def edit_item_list(uasset: bytes, uexp: bytes) -> tuple[bytes, bytes]:
     for k in range(count):
         o = at + k * IMPORT_SIZE
         outer, name = struct.unpack_from("<ii", pkg.a, o + 16)
-        if pkg.names[name] == "EqualEqual_IntInt" and outer < 0:
-            if pkg.names[struct.unpack_from("<i", pkg.a, at + (-outer - 1) * IMPORT_SIZE + 20)[0]]                     == "KismetMathLibrary":
-                hits.append(o)
+        if outer >= 0:
+            continue
+        owner = struct.unpack_from(
+            "<i", pkg.a, at + (-outer - 1) * IMPORT_SIZE + 20
+        )[0]
+        if (
+            pkg.names[name] == "EqualEqual_IntInt"
+            and pkg.names[owner] == "KismetMathLibrary"
+        ):
+            hits.append(o)
     if len(hits) != 1:
         raise RuntimeError("item list colour check not found - game update?")
     struct.pack_into("<ii", pkg.a, hits[0] + 20, pkg.name("GreaterEqual_IntInt"), 0)

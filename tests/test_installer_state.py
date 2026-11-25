@@ -24,6 +24,7 @@ def test_features_round_trip_through_a_selection():
         "autosave": "7",
         "shop_consumables": "free",
         "shop_growth": "immediate",
+        "miracles_normal": "free",
     }
     selection = state.selection_from(features)
     assert selection.mods["essences"] is True
@@ -31,6 +32,7 @@ def test_features_round_trip_through_a_selection():
     assert selection.magatsuhi == "chain"
     assert selection.item_hacks == "stockpile"
     assert selection.autosave == 7
+    assert selection.normal_miracles == "free"
     assert selection.shop["consumables"] == "free"
     assert selection.shop["growth"] == "immediate"
     assert selection.shop["misc"] == "default"
@@ -91,6 +93,29 @@ def test_selection_counts_one_per_group():
     assert selection.count() == 6
 
 
+def test_normal_miracles_flag_is_always_passed():
+    flags = state.Selection().flags()
+    assert flags[flags.index("--normal-miracles") + 1] == "default"
+    free = state.Selection(normal_miracles="free").flags()
+    assert free[free.index("--normal-miracles") + 1] == "free"
+
+
+def test_unknown_normal_miracle_mode_falls_back_to_default():
+    assert state.selection_from({"miracles_normal": "bogus"}).normal_miracles == (
+        "default"
+    )
+
+
+def test_diff_lists_a_normal_miracle_change():
+    changes = state.diff_selection(
+        state.Selection(), state.Selection(normal_miracles="unlocked")
+    )
+    assert (changes[0].label, changes[0].action) == (
+        "Normal Miracles: Unlocked",
+        "install",
+    )
+
+
 def test_autosave_choice_accepts_slots_and_off():
     assert state.autosave_choice("", 3) == "keep"
     assert state.autosave_choice("n", 3) is None
@@ -100,7 +125,7 @@ def test_autosave_choice_accepts_slots_and_off():
 
 
 def test_total_matches_the_catalogue_groups(monkeypatch):
-    expected = len(state.PATCH_MODS) + 4
+    expected = len(state.PATCH_MODS) + 5
     monkeypatch.setattr(state.os, "name", "posix")
     assert state.total_mods() == expected
 

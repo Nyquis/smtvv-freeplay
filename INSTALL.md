@@ -5,9 +5,9 @@
 
 A quality-of-life patch bundle for *Shin Megami Tensei V: Vengeance*: Reusable
 Essences, Leyline Auto-Heal, Miman Reveal, Leyline Founts, NG+ Miracles From
-Start, Free Compendium, Item Hacks (Battle Refill or Stockpile), Superjump, Shop
-Stock, Full Magatsuhi, Free Estoma, Skip Intro, Masakado Unlock,
-Newborn Clears Compendium,
+Start, Normal Miracles From Start, Free Compendium, Item Hacks (Battle Refill or
+Stockpile), Superjump, Shop Stock, Full Magatsuhi, Free Estoma, Skip Intro,
+Masakado Unlock, Newborn Clears Compendium,
 (optional)
 Autosave After Battle, and DualSense Haptics (Windows only).
 
@@ -29,7 +29,8 @@ again.
 3. Double-click **`install.bat`**.
 4. Use the installer. It walks through **Core Mods** (Space toggles; the
    focused mod's description and warnings are shown below the list),
-   **Gameplay** (Item Hacks, Full Magatsuhi mode, autosave slot), **Shop**
+   **Gameplay** (Item Hacks, Full Magatsuhi mode, autosave slot, Normal
+   Miracles), **Shop**
    (per category: game default, free, or free and immediate), and **Review**
    (install/change/remove against the current install). Enter continues, Esc
    goes back; nothing is written before the review.
@@ -83,7 +84,8 @@ Only the installer differs.
 - **Steam Deck / Linux:** run `./uninstall.sh`.
 
 The uninstall scripts restore the original executable and remove the mod's
-data paks (`pakchunk9*_*_P.pak`, including `pakchunk99_NGPlusMiracles_P.pak`).
+data paks (`pakchunk9*_*_P.pak`, including `pakchunk99_Miracles_P.pak` and the
+older `pakchunk99_NGPlusMiracles_P.pak`).
 
 Steam → SMT5V:V → Properties → Installed Files → **Verify integrity of game
 files** also restores the original executable, but leaves the mod's data paks

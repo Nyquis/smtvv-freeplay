@@ -12,7 +12,7 @@ Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
 > commitment. Back up your saves and use it at your own risk. This project is
 > not affiliated with ATLUS or SEGA.
 
-**Current version: 5.31.0**
+**Current version: 5.32.0**
 
 ## Features
 
@@ -26,58 +26,66 @@ Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
 3. **Leyline Auto-Heal** - accessing a leyline fount restores the full
    party's HP and MP for free.
 
-4. **NG+ Miracles From Start** - selected NG+ miracle gates are bypassed so
-   they are available without a cleared save.
+4. **NG+ Miracles From Start** - the NG+ miracle gates are bypassed so they
+   are available without a cleared save.
 
-5. **Free Compendium** - summoning a registered demon from the compendium
+5. **Normal Miracles From Start** - every normal (abscess and story) miracle
+   is available in the World of Shadows from the start. Choose the level when
+   installing: **Game default** (untouched), **Unlocked** (normal Glory
+   prices), or **Unlocked and free** (no Glory cost). Tier order is kept, and
+   NG+ miracles are controlled by their own switch.
+
+6. **Free Compendium** - summoning a registered demon from the compendium
    costs no Macca.
 
-6. **Item Hacks** - choose one:
+7. **Item Hacks** - choose one:
    - **Battle Refill** - any battle item you've found once tops off at the
      start of every battle.
    - **Stockpile** - battle items stack to 99, but each battle still lets you
      use only the normal carry limit of each (for example 5 Somas). Menus show
      the normal limit as the maximum, so extra stock shows as overflow (for
-     example 11/10). Items used in battle come out of your stock.
+     example 11/10). The excess is taken out of the inventory for the battle
+     and returned afterwards, so the battle limit is enforced rather than only
+     displayed.
 
-7. **Superjump** - hold jump (Space, or A/B on a controller) to keep rising;
+8. **Superjump** - hold jump (Space, or A/B on a controller) to keep rising;
    release to fall. Pressing jump in mid-air starts rising again. While
    airborne you move 50% faster and turn almost instantly. You can fly over
    story triggers, which are not always marked on the map; if events aren't
    triggering after flying over terrain, backtrack and walk.
 
-8. **Shop Stock** - choose per category (consumables, growth items, essences,
+9. **Shop Stock** - choose per category (consumables, growth items, essences,
    misc) whether stock is free and whether it appears immediately. The growth
    category covers Gospels, Grimoires, Sutras, Balms and Incenses.
 
-9. **Full Magatsuhi** - battles start with a full Magatsuhi gauge: either
-   every battle (default) or once per chain. Magatsuhi gain during battle is
-   unchanged.
+10. **Full Magatsuhi** - battles start with a full Magatsuhi gauge: either
+    every battle (default) or once per chain. Magatsuhi gain during battle is
+    unchanged.
 
-10. **Skip Intro** - no logo or warning screens, no opening movie and no
+11. **Skip Intro** - no logo or warning screens, no opening movie and no
     "press any button" screen: after a few seconds of black screen the game
     opens straight to the title menu. Controller input sometimes stalls on
     launch; tab out and back in, or open and close the Steam overlay, to
     restore control.
 
-11. **Masakado Unlock** - Masakado offers his powered-up fight without the
+12. **Masakado Unlock** - Masakado offers his powered-up fight without the
     Kiou Sword.
 
-12. **Newborn Clears Compendium** - starting a New Game+ with the Newborn
+13. **Newborn Clears Compendium** - starting a New Game+ with the Newborn
     method also empties the Demon Compendium, so the compendium, reverse
     fusion and summoning start fresh. The English carry-over lists on the New
     Game+ screen say so; Reborn and Godborn still keep the compendium.
 
-13. **Autosave After Battle** (off unless chosen) - after every battle, once
+14. **Autosave After Battle** (off unless chosen) - after every battle, once
     you are back on the field, the game saves to a save slot you pick at
     install time (1-20). That slot is overwritten after each battle, so pick
     one you don't use for anything else.
 
-14. **Post-Battle Refresh (experimental)** - restores the party's HP and MP
+15. **Post-Battle Refresh (experimental)** - restores the party's HP and MP
     after every battle. This makes attrition much less threatening and can
     trivialise the game; it is off by default.
 
-15. **DualSense Haptics** (Windows only) - haptic effects on a DualSense
+16. **DualSense Haptics** (Windows only) - haptic effects on a DualSense
     controller for battle hits by element, criticals, blocks and misses,
     skills, press turns, Magatsuhi, field actions and menus, triggered by the
     sounds the game plays. Haptics will only work with a wired DualSense
@@ -85,11 +93,11 @@ Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
     each effect with the panel, `DualSenseHaptics\SMTVHaptics.exe` in the
     game's `Project\Binaries\Win64` folder.
 
-15. **Free Estoma** - the Estoma Barrier costs no Magatsuhi: summoning it and
+17. **Free Estoma** - the Estoma Barrier costs no Magatsuhi: summoning it and
     keeping it through moon phases leave the gauge untouched. Estoma Field I
     still has to be learned, and Estoma Field II becomes redundant.
 
-16. **Leyline Founts** - fount icons are drawn through unexplored fog on the
+18. **Leyline Founts** - fount icons are drawn through unexplored fog on the
     main map. The minimap keeps its normal local range, so a fount appears
     there only when it is nearby. This does not unlock the founts or change
     fast travel.
@@ -102,7 +110,7 @@ Quality-of-life patch bundle for Shin Megami Tensei V: Vengeance.
 - No separate Python install is required when using the packaged release.
   A portable Python runtime is included (Windows); on Linux it uses `python3`.
 - Nothing else to install: the [repak](https://github.com/trumank/repak)
-  pak tool used by the NG+ Miracles patch is bundled (`repak/`, MIT/Apache-2.0
+  pak tool used by the miracle patches is bundled (`repak/`, MIT/Apache-2.0
   licensed) for both Windows and Linux/Steam Deck.
 - **Internet is needed once on the first install.** repak downloads the Oodle
   runtime (`oo2core_9_win64.dll`) to read the game's compressed paks. It is
@@ -123,7 +131,8 @@ See **[INSTALL.md](INSTALL.md)** for the full step-by-step. Quick version below.
 
 3. Use the installer. It walks through four screens: **Core Mods** (Space
    toggles; the focused mod's description and any warning appear below the
-   list), **Gameplay** (Item Hacks, Full Magatsuhi mode, autosave slot),
+   list), **Gameplay** (Item Hacks, Full Magatsuhi mode, autosave slot, Normal
+   Miracles),
    **Shop** (a mode per category), and **Review** (what will be installed,
    changed or removed). Enter continues, Esc goes back. The review is the
    first point at which anything is written.
@@ -193,6 +202,7 @@ Optional patch flags:
 --no-mimans
 --leylines
 --no-miracles
+--normal-miracles {default,unlocked,free}
 --no-compendium
 --no-refill
 --stockpile
@@ -230,8 +240,10 @@ Steam -> SMT5V -> Properties -> Installed Files -> Verify integrity
 ```
 
 Note that Verify Integrity does not remove
-`pakchunk99_NGPlusMiracles_P.pak` (Steam leaves unknown files alone) — use the
+`pakchunk99_Miracles_P.pak` (Steam leaves unknown files alone) — use the
 uninstall scripts, or delete that file from `Project/Content/Paks` yourself.
+An older install may also have `pakchunk99_NGPlusMiracles_P.pak`; the
+uninstallers and the patcher remove it too.
 
 ## Building from source
 
@@ -374,10 +386,11 @@ battle-usable item with a lower limit, so stock above the limit shows as
 overflow (for example 11/10). A small override pak built from your own
 `pakchunk0` makes the camp item list colour such counts like a full stack
 (it normally does so only when the count equals the limit); the
-uninstallers remove it. When a battle enters its first step, the stock above each item's
-normal limit is set aside; until the battle ends, the item count the game
-reports is the real count minus that amount, so the battle offers at most the
-normal limit. Using an item takes it from the real stock.
+uninstallers remove it. When a battle enters its first step, the stock above
+each item's normal limit is taken out of the real inventory and remembered;
+the battle then sees only the normal carry limit, so the item really cannot be
+used past 0/10. The set-aside stock is added back when the battle ends, and
+leftovers from an interrupted battle are restored at the next battle start.
 
 ### Battle Refill
 
@@ -407,13 +420,31 @@ DualSense Haptics. Settings in `SMTVHaptics.ini` are kept when reinstalling.
 
 ### NG+ Miracles From Start
 
-This combines executable hooks for miracle visibility and purchasability with
+This combines executable hooks for NG+ miracle visibility and purchasability with
 a data-pak edit for `GodParameterDataTable`. The installer extracts the table
 from your own `pakchunk0-WindowsNoEditor.pak` with the bundled `repak` tool,
 applies the edits, and packs the result as
-`Project/Content/Paks/pakchunk99_NGPlusMiracles_P.pak`. No game data is
+`Project/Content/Paks/pakchunk99_Miracles_P.pak`. No game data is
 redistributed with the mod — everything is derived from your installed copy
 at install time.
+
+The normal-miracle option uses the same pak when its free level is selected.
+
+### Normal Miracles From Start
+
+Every normal miracle's availability is decided by one unlock check that reads
+the save's abscess and story flags. The patch replaces that check's five-byte
+jump thunk with "return true", so every normal miracle passes the gate without
+touching save data. The World of Shadows then lists them from the first visit,
+at their normal Glory prices and with the normal tier order (each tier still
+needs the previous one learned).
+
+The **Unlocked and free** level also clears the Glory cost in
+`GodParameterDataTable` for the normal rows. The NG+ rows, the two
+save-state rows (`Recalled Divinity` and `Moral Transcendence`) and the
+unused placeholder rows are never edited, so the NG+ switch stays
+independent. Like the NG+ pak, the free-price pak is built from your own game
+data at install time.
 
 ## Compatibility Notes
 

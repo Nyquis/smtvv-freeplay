@@ -5,18 +5,41 @@
 
 from __future__ import annotations
 
+import struct
+
 import pytest
 
 import gameplay_patches as gp
 import stockpile
 
 
-def test_show_count_clamps_boss_rush_refill():
-    assert stockpile._show_count(99, 0, 5) == (5, 94)
-    assert stockpile._show_count(99, 94, 5) == (5, 94)
-    assert stockpile._show_count(98, 94, 5) == (4, 94)
-    assert stockpile._show_count(3, 94, 5) == (0, 94)
-    assert stockpile._show_count(99, 0, 0) == (99, 0)
+def _call_targets(code: bytes, base: int) -> set[int]:
+    targets = set()
+    for i in range(len(code) - 4):
+        if code[i] == 0xE8:
+            targets.add(base + i + 5 + struct.unpack_from("<i", code, i + 1)[0])
+    return targets
+
+
+def test_step_hook_sets_aside_and_restores():
+    base = 0x140100000
+    code = stockpile._step_code(
+        base,
+        0x140200000,  # original SetNextStep
+        0x140300000,  # limits table
+        0x140400000,  # hidden table
+        0x140500000,  # active flag
+        0x140600000,  # ItemGet
+        0x140700000,  # ItemGetNum
+        0x140800000,  # ItemErase
+    )
+    calls = _call_targets(code, base)
+    assert 0x140200000 in calls
+    assert 0x140600000 in calls
+    assert 0x140700000 in calls
+    assert 0x140800000 in calls
+    # One restore loop at PRE and one at the end steps.
+    assert code.count(bytes.fromhex("0f b6 14 31")) == 2
 
 
 def test_cave_va_for_two_element_entry():

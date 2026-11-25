@@ -54,8 +54,12 @@ if defined HAPTICS call :haptics_remove
 del /Q "%BINDIR%\Freeplay.features" "%BINDIR%\Freeplay.features.new" >nul 2>nul
 
 for %%I in ("%BINDIR%\..\..\..") do set "GAMEDIR=%%~fI"
+if exist "%GAMEDIR%\Project\Content\Paks\pakchunk99_Miracles_P.pak" (
+    echo  Removing miracle data pak...
+    del /Q "%GAMEDIR%\Project\Content\Paks\pakchunk99_Miracles_P.pak" >nul 2>nul
+)
 if exist "%GAMEDIR%\Project\Content\Paks\pakchunk99_NGPlusMiracles_P.pak" (
-    echo  Removing NG+ miracle data pak...
+    echo  Removing legacy NG+ miracle data pak...
     del /Q "%GAMEDIR%\Project\Content\Paks\pakchunk99_NGPlusMiracles_P.pak" >nul 2>nul
 )
 if exist "%GAMEDIR%\Project\Content\Paks\pakchunk98_FreeplayShop_P.pak" (

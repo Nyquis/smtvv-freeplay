@@ -20,7 +20,11 @@ from boot_pak import BOOT_PAK
 from estoma import ESTOMA_PAK
 from installer_state import BIN_PARTS, EXE, FEATURES, PAKS_PARTS
 from newborn import NEWBORN_PAK
-from patch_smtvv_freeplay import LEGACY_MAP_PAK, MIRACLE_PAK
+from patch_smtvv_freeplay import (
+    LEGACY_MAP_PAK,
+    LEGACY_MIRACLE_PAK,
+    MIRACLE_PAK,
+)
 from quest_pak import QUEST_PAK
 from reveal import REVEAL_PAK
 from shop_pak import SHOP_PAK
@@ -37,6 +41,7 @@ INSTALLED_PAKS = (
     NEWBORN_PAK,
     STOCK_PAK,
 )
+LEGACY_PAKS = (LEGACY_MIRACLE_PAK,)
 LEGACY_SUPERJUMP_SHA256 = (
     "4d51dc377c15006ee4903de265ccda3514900a059d2019498b66ee9dcc56b819"
 )
@@ -270,7 +275,7 @@ def restore_original(bindir: Path, log) -> bool:
 
 
 def remove_paks(game_dir: Path, log) -> None:
-    for name in INSTALLED_PAKS:
+    for name in (*INSTALLED_PAKS, *LEGACY_PAKS):
         path = paks_dir(game_dir) / name
         if path.is_file():
             log(f"Removing {name}...")
