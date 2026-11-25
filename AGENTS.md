@@ -9,23 +9,17 @@ around it.
 
 - **All development tooling and Python environments go through `pixi`.**
   Declare environments and dependencies in `pixi.toml` (or `pyproject.toml`
-  with a `[tool.pixi]` table) and run tasks as `pixi run <task>`. Never use a
-  system/global Python, `pip install`, or an ad-hoc `venv` / `virtualenv`.
+  with a `[tool.pixi]` table) and run tasks as `pixi run <task>`.
 - Current tasks: `pixi run patch`, `pixi run lint`, `pixi run fmt`,
-  `pixi run fmt-check`. `pixi.toml` and `pixi.lock` are committed — do not
-  hand-edit the lock file. See `DEVELOPMENT.md` for setup and examples.
+  `pixi run fmt-check`, `pixi run test`, `pixi run package`. `pixi.toml` and
+  `pixi.lock` are committed — do not hand-edit the lock file. See
+  `DEVELOPMENT.md` for setup and examples.
 - `pixi` is already installed (v0.59). Do not upgrade it or install it
   globally without asking. `.pixi/` is ignored in both `.gitignore` and
   `.kopiaignore`.
 - The bundled `python\python.exe` (Windows) / `python3` (Linux) is what ships
   to users and what the installers invoke. Use it only to verify end-user
   behaviour — never to install development dependencies.
-- **NEVER install anything globally.** No `pip install` outside pixi, no
-  `pip install --user`, no `winget` / `scoop` / `choco` / `npm -g` / `apt` /
-  `brew`, and no changes to `PATH`, the registry, shell profiles, services,
-  scheduled tasks, firewall rules or global git config.
-- A new dependency still requires asking first (§8). Once approved, add it to
-  the pixi environment — never install it outside pixi.
 - Do not download tools or binaries at runtime. Ask first, and vendor or pin
   anything that is approved — the bundled `python/` and `repak/` exist for
   exactly this reason.
@@ -55,39 +49,28 @@ around it.
 
 ## 3. Keep `.gitignore` and `.kopiaignore` in sync
 
-Both files live at the repository root and **MUST be updated together in the
-same change**.
+Both live at the repository root and **MUST be updated together in the same
+change**, with matching sections and comments.
 
-- New generated file type → add the same pattern to **both** files.
-- Keep sections, ordering and comments aligned so the two stay reviewable
-  side by side.
-- Ignore: caches, virtualenvs, build output, patcher output, and binaries
-  copied from the game.
-- **NEVER ignore** source, tests, assets or binaries the project needs to run.
-- `.kopiaignore` uses gitignore syntax and is read by Kopia. `.git/` is
-  deliberately **not** ignored there so unpushed work stays recoverable;
-  explain the reason in a comment before changing that.
+- Ignore caches, virtualenvs, build output, patcher output, and binaries copied
+  from the game. **NEVER ignore** source, tests, assets or binaries the project
+  needs to run.
+- `.kopiaignore` is a superset for backups. `.git/` is deliberately **not**
+  ignored there so unpushed work stays recoverable; explain the reason in a
+  comment before changing that.
 
 ## 4. Tests
 
-- Tests are **change-scoped by default**: write tests only for code you add or
-  modify. Do not build out a full suite retroactively.
-- **Ask before expanding coverage beyond the changed code** — a full test
-  suite, refactoring the test layout, or covering untouched modules all need
-  the user's approval first.
-- A change must cover both the new behaviour and the regression it fixes. If a
-  change cannot reasonably be tested, say so and explain why.
-- Put tests in `tests/` and run them with `pixi run test` (`pytest` is part of
-  the pixi environment; `pytest.ini` sets the import path).
+- Tests are **change-scoped by default**: write them only for code you add or
+  modify. A change must cover both the new behaviour and the regression it
+  fixes. If it cannot reasonably be tested, say so and explain why.
+- Put tests in `tests/` and run them with `pixi run test` (`pytest.ini` sets the
+  import path).
 - Test pure logic that does not need the real game: patch selection,
   offset/byte patching, argument parsing, install-path discovery, pak handling.
 - Tests must be hermetic: no network, no real game install, no writes outside
   the repository or a temp directory.
-- Run the tests covering the changed code before reporting a change as done,
-  and state what you ran and the result. Never claim success without running
-  them.
-- Adding `pytest` or any other dependency counts as a global install question:
-  see §1 and ask first.
+- State what you ran and the result. Never claim success without running it.
 
 ## 5. Never leak private information
 
@@ -101,33 +84,26 @@ examples, commit messages or branch names:
 - generated caches that embed absolute paths (`__pycache__/*.pyc`,
   `.pytest_cache/`); both are ignored and must never be committed
 
-Before every commit:
-
-- review `git diff` and `git status` for files staged by accident
-- confirm generated output (`*.patched`, `*.original`, `*.pak`, caches) is not
-  staged
-- use placeholders in examples and fixtures
+Before every commit, review `git diff` and `git status` for files staged by
+accident, and confirm generated output (`*.patched`, `*.original`, `*.pak`,
+caches) is not staged.
 
 ## 6. Git and remotes
 
-- `origin` is the `Nyquis` fork; `upstream` is `countlessbats`. Push to
-  `origin` only.
+- `origin` is the `Nyquis` fork; `upstream` is `countlessbats`. When the user
+  asks for a push in that same request, push to `origin` only.
 - **NEVER** push to `upstream`, force-push, or rewrite published history
   without explicit permission.
 - This checkout authenticates `origin` as `Nyquis` through repo-local config.
   Do not change `credential.*` or `user.*`, and do not run `gh auth switch`.
-- Keep commits focused and explain the *why* in the message.
-- **Before every push, audit what is being published** for machine-identifying
+- Before every push, audit what is being published for machine-identifying
   text: `C:\Users\<name>`, `C:/Users/<name>`, `/home/<name>`, `AppData`, the
-  machine hostname and account names. Docs and examples use placeholders such
-  as `C:\Users\<user>\...`. Check the staged diff **and** `git log -p --all`;
-  both must come back clean.
+  machine hostname and account names. Check the staged diff **and**
+  `git log -p --all`; both must come back clean.
 
 ## 7. Project conventions
 
 - Python 3.12; prefer the standard library over new dependencies.
-- `pixi.toml` (plus `pixi.lock`) is the source of truth for the development
-  environment — commit the lock file, and never hand-edit `.pixi/`.
 - `ruff.toml` configures linting/formatting (`py312`, line length 88). The
   existing tree is not ruff-clean: do not mass-fix or reformat unrelated
   files — run `pixi run lint <file>` / `pixi run fmt-check <file>` on what you
@@ -135,9 +111,8 @@ Before every commit:
 - `DEVELOPMENT.md` documents the dev workflow. Keep it in sync when tasks or
   setup change.
 - `install.bat` and `install.sh` must stay feature-matched — a change to one
-  usually needs the matching change in the other.
-- When behaviour changes, update `README.md`, `INSTALL.md` and `uninstall.*`
-  so they stay consistent with the installers.
+  usually needs the matching change in the other. Update `README.md`,
+  `INSTALL.md` and `uninstall.*` when behaviour changes.
 - Bundled binaries (`python/`, `repak/`, `DualSenseHaptics`) are committed.
   Do not rebuild or replace them without asking.
 - Keep `LICENSE`, `NOTICE`, `LICENSING.md` and `LICENSES/MIT.txt` in sync.
@@ -150,15 +125,10 @@ Before every commit:
 
 ## 8. Ask, don't assume
 
-Ask before:
-
-- installing anything (§1), including adding a dependency to pixi
-- touching anything outside this repository (§2)
-- changing defaults, the install flow, or patched game behaviour
-- expanding tests beyond the changed code (§4)
-- adding CI or new top-level directories
-- deleting or renaming files, or rewriting history
-- changing the release version
+Ask before changing defaults, the install flow, or patched game behaviour;
+before adding a dependency to pixi; before adding CI or new top-level
+directories; before deleting or renaming files or rewriting history; and before
+changing the release version.
 
 State assumptions explicitly when you proceed. If a request is ambiguous, ask
 one focused question instead of guessing.
